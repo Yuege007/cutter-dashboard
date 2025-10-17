@@ -1,0 +1,192 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 全局样式 */
+@layer base {
+  html {
+    font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  }
+
+  body {
+    background-color: #111827;
+    color: #ffffff;
+  }
+}
+
+/* 主题样式 */
+@layer base {
+
+  /* 浅色主题 */
+  .theme-light {
+    --color-primary: #0066CC;
+    --color-success: #3E8635;
+    --color-warning: #F0AB00;
+    --color-danger: #C9190B;
+    --color-background: #f8fafc;
+    --color-surface: #ffffff;
+    --color-text: #1e293b;
+    --color-text-secondary: #64748b;
+  }
+
+  .theme-light body {
+    background-color: var(--color-background);
+    color: var(--color-text);
+  }
+
+  /* 深色主题 */
+  .theme-dark {
+    --color-primary: #3b82f6;
+    --color-success: #10b981;
+    --color-warning: #f59e0b;
+    --color-danger: #ef4444;
+    --color-background: #0f172a;
+    --color-surface: #1e293b;
+    --color-text: #f1f5f9;
+    --color-text-secondary: #cbd5e1;
+  }
+
+  .theme-dark body {
+    background-color: var(--color-background);
+    color: var(--color-text);
+  }
+
+  /* 科技蓝主题 */
+  .theme-tech {
+    --color-primary: #00d4ff;
+    --color-success: #00ff88;
+    --color-warning: #ffaa00;
+    --color-danger: #ff4757;
+    --color-background: #0a0e1a;
+    --color-surface: #1a1f2e;
+    --color-text: #ffffff;
+    --color-text-secondary: #a8b2d1;
+  }
+
+  .theme-tech body {
+    background-color: var(--color-background);
+    color: var(--color-text);
+  }
+}
+
+/* 组件样式 */
+@layer components {
+  .card {
+    background-color: var(--color-surface);
+    color: var(--color-text);
+    @apply backdrop-blur-card rounded-card shadow-lg;
+  }
+
+  .theme-light .card {
+    @apply border border-gray-200;
+    background-color: var(--color-surface);
+  }
+
+  .theme-dark .card,
+  .theme-tech .card {
+    @apply border border-white/20;
+    background-color: var(--color-surface);
+    backdrop-filter: blur(20px) saturate(180%);
+  }
+
+  .card-title {
+    @apply text-lg font-medium;
+    color: var(--color-text);
+  }
+
+  .card-content {
+    color: var(--color-text-secondary);
+  }
+
+  /* 按钮样式 */
+  .btn-primary {
+    background-color: var(--color-primary);
+    color: white;
+    @apply px-4 py-2 rounded-lg font-medium transition-all duration-200;
+  }
+
+  .btn-primary:hover {
+    filter: brightness(1.1);
+  }
+
+  .btn-secondary {
+    background-color: var(--color-surface);
+    color: var(--color-text);
+    @apply px-4 py-2 rounded-lg font-medium border transition-all duration-200;
+  }
+
+  .theme-light .btn-secondary {
+    @apply border-gray-300;
+  }
+
+  .theme-dark .btn-secondary,
+  .theme-tech .btn-secondary {
+    @apply border-white/20;
+  }
+
+  .btn-secondary:hover {
+    background-color: var(--color-primary);
+    color: white;
+  }
+
+}
+
+/* 工具类样式 */
+@layer utilities {
+
+  /* 自定义滚动条 */
+  .custom-scrollbar {
+    scrollbar-width: thin;
+  }
+
+  .theme-light .custom-scrollbar {
+    scrollbar-color: #cbd5e1 #f1f5f9;
+  }
+
+  .theme-dark .custom-scrollbar,
+  .theme-tech .custom-scrollbar {
+    scrollbar-color: rgba(138, 141, 144, 0.4) rgba(255, 255, 255, 0.05);
+  }
+
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    /* 改为6px，与VirtualGrid保持一致 */
+  }
+
+  /* 隐藏滚动条头尾的三角指示按钮 */
+  .custom-scrollbar::-webkit-scrollbar-button {
+    display: none;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    border-radius: 3px;
+    /* 改为3px，与VirtualGrid保持一致 */
+  }
+
+  .theme-light .custom-scrollbar::-webkit-scrollbar-track {
+    background: #f1f5f9;
+  }
+
+  .theme-dark .custom-scrollbar::-webkit-scrollbar-track,
+  .theme-tech .custom-scrollbar::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    border-radius: 3px;
+    /* 改为3px，与VirtualGrid保持一致 */
+  }
+
+  .theme-light .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+  }
+
+  .theme-dark .custom-scrollbar::-webkit-scrollbar-thumb,
+  .theme-tech .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(138, 141, 144, 0.4);
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    filter: brightness(1.2);
+  }
+}

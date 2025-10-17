@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能工具柜API测试</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: #fff;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .api-info {
+            background: rgba(255,255,255,0.1);
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .login-section {
+            background: rgba(255,255,255,0.15);
+            padding: 25px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        
+        .form-group input {
+            width: 100%;
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            background: rgba(255,255,255,0.9);
+            color: #333;
+            font-size: 14px;
+        }
+        
+        .btn {
+            background: linear-gradient(45deg, #00d4ff, #0099cc);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            margin: 5px;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,212,255,0.4);
+        }
+        
+        .btn:disabled {
+            background: #666;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .test-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .test-panel {
+            background: rgba(255,255,255,0.1);
+            padding: 20px;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        
+        .test-panel h3 {
+            margin-bottom: 15px;
+            color: #00d4ff;
+        }
+        
+        .result-section {
+            background: rgba(0,0,0,0.3);
+            padding: 20px;
+            border-radius: 15px;
+            margin-top: 20px;
+        }
+        
+        .result-box {
+            background: #1a1a1a;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border-left: 4px solid #00d4ff;
+        }
+        
+        .result-box h4 {
+            color: #00d4ff;
+            margin-bottom: 10px;
+        }
+        
+        .result-content {
+            background: #000;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .status-success {
+            color: #4CAF50;
+        }
+        
+        .status-error {
+            color: #f44336;
+        }
+        
+        .status-info {
+            color: #2196F3;
+        }
+        
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .kpi-card {
+            background: rgba(255,255,255,0.1);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            backdrop-filter: blur(10px);
+        }
+        
+        .kpi-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #00d4ff;
+        }
+        
+        .kpi-label {
+            font-size: 0.9em;
+            margin-top: 5px;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔧 智能工具柜API测试平台</h1>
+            <div class="api-info">
+                <strong>API地址:</strong> https://apict.jijiayun.com<br>
+                <strong>授权码:</strong> DGjSZDFOOK12aWEsc
+            </div>
+        </div>
+
+        <!-- 登录区域 -->
+        <div class="login-section">
+            <h2>🔐 用户登录</h2>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 200px; gap: 15px; align-items: end;">
+                <div class="form-group">
+                    <label for="mobile">手机号:</label>
+                    <input type="text" id="mobile" placeholder="请输入手机号">
+                </div>
+                <div class="form-group">
+                    <label for="password">密码:</label>
+                    <input type="password" id="password" placeholder="请输入密码">
+                </div>
+                <div class="form-group">
+                    <label for="tokenCode">授权码:</label>
+                    <input type="text" id="tokenCode" value="DGjSZDFOOK12aWEsc" readonly>
+                </div>
+                <button class="btn" onclick="login()">登录</button>
+            </div>
+            <div id="loginStatus" style="margin-top: 15px;"></div>
+        </div>
+
+        <!-- API测试区域 -->
+        <div class="test-section">
+            <div class="test-panel">
+                <h3>📊 核心数据接口</h3>
+                <button class="btn" onclick="testMaterialInfo()" disabled id="btnMaterial">查询物料信息</button>
+                <button class="btn" onclick="testCabinetList()" disabled id="btnCabinet">查询工具柜列表</button>
+                <button class="btn" onclick="testAlarmMaterial()" disabled id="btnAlarm">查询预警物料</button>
+                <button class="btn" onclick="testUserList()" disabled id="btnUser">查询用户列表</button>
+            </div>
+            
+            <div class="test-panel">
+                <h3>📈 业务数据接口</h3>
+                <button class="btn" onclick="testBorrowRecords()" disabled id="btnBorrow">领用记录(近7天)</button>
+                <button class="btn" onclick="testReturnRecords()" disabled id="btnReturn">归还记录(近7天)</button>
+                <button class="btn" onclick="testCabinetDetail()" disabled id="btnDetail">货道详情</button>
+                <button class="btn" onclick="testProjectList()" disabled id="btnProject">项目管理</button>
+            </div>
+        </div>
+
+        <!-- KPI展示区域 -->
+        <div class="kpi-grid" id="kpiGrid" style="display: none;">
+            <div class="kpi-card">
+                <div class="kpi-value" id="materialTotal">-</div>
+                <div class="kpi-label">物料总类数</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-value" id="alarmTotal">-</div>
+                <div class="kpi-label">库存预警数</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-value" id="cabinetTotal">-</div>
+                <div class="kpi-label">在线柜体数</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-value" id="borrowTotal">-</div>
+                <div class="kpi-label">本月领用总件数</div>
+            </div>
+        </div>
+
+        <!-- 结果显示区域 -->
+        <div class="result-section">
+            <h2>📋 测试结果</h2>
+            <div id="results"></div>
+        </div>
+    </div>
+
+    <script>
+        let authToken = '';
+        let apiBase = 'https://apict.jijiayun.com/cutter/toolCabinetApi';
+        
+        // 添加结果显示函数
+        function addResult(title, content, type = 'info') {
+            const results = document.getElementById('results');
+            const resultBox = document.createElement('div');
+            resultBox.className = 'result-box';
+            
+            const timestamp = new Date().toLocaleString();
+            resultBox.innerHTML = `
+                <h4 class="status-${type}">[${timestamp}] ${title}</h4>
+                <div class="result-content">${content}</div>
+            `;
+            
+            results.insertBefore(resultBox, results.firstChild);
+        }
+        
+        // 登录函数
+        async function login() {
+            const mobile = document.getElementById('mobile').value;
+            const password = document.getElementById('password').value;
+            const tokenCode = document.getElementById('tokenCode').value;
+            
+            if (!mobile || !password) {
+                addResult('登录失败', '请填写手机号和密码', 'error');
+                return;
+            }
+            
+            try {
+                const url = `${apiBase}/checkPassWordLogin?mobile=${encodeURIComponent(mobile)}&passWord=${encodeURIComponent(password)}&token_code=${encodeURIComponent(tokenCode)}`;
+                
+                addResult('登录请求', `正在请求: ${url}`, 'info');
+                
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json;charset=UTF-8'
+                    }
+                });
+                
+                const data = await response.json();
+                addResult('登录响应', JSON.stringify(data, null, 2), data.code === 'OK' ? 'success' : 'error');
+                
+                if (data.code === 'OK' && data.data && data.data.token) {
+                    authToken = data.data.token;
+                    document.getElementById('loginStatus').innerHTML = `<span class="status-success">✅ 登录成功! Token: ${authToken.substring(0, 20)}...</span>`;
+                    
+                    // 启用所有测试按钮
+                    const buttons = document.querySelectorAll('.btn[disabled]');
+                    buttons.forEach(btn => {
+                        if (btn.id !== 'btnLogin') {
+                            btn.disabled = false;
+                        }
+                    });
+                    
+                    // 显示KPI区域
+                    document.getElementById('kpiGrid').style.display = 'grid';
+                    
+                } else {
+                    document.getElementById('loginStatus').innerHTML = `<span class="status-error">❌ 登录失败: ${data.message}</span>`;
+                }
+                
+            } catch (error) {
+                addResult('登录错误', `网络错误: ${error.message}`, 'error');
+                document.getElementById('loginStatus').innerHTML = `<span class="status-error">❌ 网络错误: ${error.message}</span>`;
+            }
+        }
+
+        // 通用API请求函数
+        async function apiRequest(endpoint, method = 'POST', body = null, queryParams = '') {
+            if (!authToken) {
+                addResult('API请求失败', '请先登录获取Token', 'error');
+                return null;
+            }
+
+            try {
+                const url = `${apiBase}/${endpoint}${queryParams}`;
+                const options = {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json;charset=UTF-8',
+                        'token': authToken
+                    }
+                };
+
+                if (body) {
+                    options.body = JSON.stringify(body);
+                }
+
+                addResult(`API请求 - ${endpoint}`, `请求URL: ${url}\n请求方法: ${method}\n请求体: ${body ? JSON.stringify(body, null, 2) : '无'}`, 'info');
+
+                const response = await fetch(url, options);
+                const data = await response.json();
+
+                addResult(`API响应 - ${endpoint}`, JSON.stringify(data, null, 2), data.code === 'OK' ? 'success' : 'error');
+
+                return data;
+            } catch (error) {
+                addResult(`API错误 - ${endpoint}`, `网络错误: ${error.message}`, 'error');
+                return null;
+            }
+        }
+
+        // 查询物料信息
+        async function testMaterialInfo() {
+            const data = await apiRequest('materialGrid', 'POST', {}, '?page=1&rows=10');
+            if (data && data.code === 'OK') {
+                document.getElementById('materialTotal').textContent = data.data.total || 0;
+            }
+        }
+
+        // 查询工具柜列表
+        async function testCabinetList() {
+            const data = await apiRequest('searchToolCabinetList', 'POST', null, '?page=1&rows=10');
+            if (data && data.code === 'OK') {
+                document.getElementById('cabinetTotal').textContent = data.data.total || 0;
+            }
+        }
+
+        // 查询预警物料
+        async function testAlarmMaterial() {
+            const data = await apiRequest('findInventoryAlarmMaterial', 'POST', null, '?page=1&rows=10');
+            if (data && data.code === 'OK') {
+                document.getElementById('alarmTotal').textContent = data.data.total || 0;
+            }
+        }
+
+        // 查询用户列表
+        async function testUserList() {
+            const data = await apiRequest('searchUserList', 'POST', null, '?page=1&rows=10');
+        }
+
+        // 查询领用记录(近7天)
+        async function testBorrowRecords() {
+            const endDate = new Date();
+            const startDate = new Date();
+            startDate.setDate(endDate.getDate() - 7);
+
+            const startStr = startDate.toISOString().slice(0, 19).replace('T', ' ');
+            const endStr = endDate.toISOString().slice(0, 19).replace('T', ' ');
+
+            const queryParams = `?star_str=${encodeURIComponent(startStr)}&end_str=${encodeURIComponent(endStr)}&page=1&rows=20`;
+            const data = await apiRequest('searchByBorrowTime', 'POST', null, queryParams);
+
+            if (data && data.code === 'OK') {
+                // 计算本月领用总件数
+                const currentMonth = new Date().getMonth();
+                const currentYear = new Date().getFullYear();
+                let monthlyTotal = 0;
+
+                if (data.data && data.data.rows) {
+                    data.data.rows.forEach(record => {
+                        const payTime = new Date(record.payTime);
+                        if (payTime.getMonth() === currentMonth && payTime.getFullYear() === currentYear) {
+                            monthlyTotal += record.payNum || 0;
+                        }
+                    });
+                }
+
+                document.getElementById('borrowTotal').textContent = monthlyTotal;
+            }
+        }
+
+        // 查询归还记录(近7天)
+        async function testReturnRecords() {
+            const endDate = new Date();
+            const startDate = new Date();
+            startDate.setDate(endDate.getDate() - 7);
+
+            const startStr = startDate.toISOString().slice(0, 19).replace('T', ' ');
+            const endStr = endDate.toISOString().slice(0, 19).replace('T', ' ');
+
+            const queryParams = `?star_str=${encodeURIComponent(startStr)}&end_str=${encodeURIComponent(endStr)}&page=1&rows=20`;
+            const data = await apiRequest('searchByReturnTime', 'POST', null, queryParams);
+        }
+
+        // 查询货道详情(需要先获取柜子编号)
+        async function testCabinetDetail() {
+            // 先获取柜子列表
+            const cabinetData = await apiRequest('searchToolCabinetList', 'POST', null, '?page=1&rows=1');
+
+            if (cabinetData && cabinetData.code === 'OK' && cabinetData.data.rows.length > 0) {
+                const cuttingNo = cabinetData.data.rows[0].cuttingNo;
+                const data = await apiRequest('searchItemList', 'POST', { cuttingNo: cuttingNo });
+            } else {
+                addResult('货道详情测试', '没有找到可用的工具柜', 'error');
+            }
+        }
+
+        // 查询项目管理
+        async function testProjectList() {
+            const data = await apiRequest('findProjectManagementList', 'POST', { projectState: 0 }, '?page=1&rows=10');
+        }
+    </script>
+</body>
+</html>
