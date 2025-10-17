@@ -16,6 +16,16 @@ See [Vite Configuration Reference](https://vite.dev/config/).
 npm install
 ```
 
+### Environment
+
+Copy the example env and adjust values as needed:
+
+```sh
+cp .env.example .env
+```
+
+Update `VITE_API_BASE_URL` and other settings in `.env`. The real `.env` is ignored by Git and should not be committed.
+
 ### Compile and Hot-Reload for Development
 
 ```sh
