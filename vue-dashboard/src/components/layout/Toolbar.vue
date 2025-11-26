@@ -14,7 +14,26 @@
       </button>
 
       <div class="toolbar-title">
-        <h1 class="title-text">{{ title }}</h1>
+        <template v-if="!isEditingTitle">
+          <h1
+            class="title-text"
+            @dblclick="startEditTitle"
+            :title="'双击编辑标题'"
+          >
+            {{ title }}
+          </h1>
+        </template>
+        <template v-else>
+          <input
+            ref="titleInputRef"
+            v-model="titleInput"
+            type="text"
+            class="title-input"
+            @blur="confirmTitle"
+            @keyup.enter="confirmTitle"
+            @keyup.esc="cancelEdit"
+          />
+        </template>
         <div v-if="breadcrumbs && breadcrumbs.length > 0" class="breadcrumbs">
           <span
             v-for="(item, index) in breadcrumbs"
@@ -193,7 +212,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useThemeStore } from '@/stores/theme'
 import { useAuthStore } from '@/stores/auth'
@@ -206,7 +225,7 @@ export interface ToolbarProps {
 }
 
 const props = withDefaults(defineProps<ToolbarProps>(), {
-  title: 'Vue 数字看板',
+  title: '数字看板系统',
   showSearch: true,
   sidebarVisible: true
 })
@@ -221,6 +240,7 @@ const emit = defineEmits<{
   importDashboard: []
   clearAll: []
   logout: []
+  'update:title': [newTitle: string]
 }>()
 
 // Router and Stores
@@ -240,6 +260,37 @@ const currentTheme = computed(() => themeStore.currentTheme)
 // 用户相关计算属性
 const userDisplayName = computed(() => authStore.getUserDisplayName)
 const userCompany = computed(() => authStore.getUserCompany)
+
+// 标题编辑
+const isEditingTitle = ref(false)
+const titleInput = ref(props.title || '')
+const titleInputRef = ref<HTMLInputElement>()
+
+watch(() => props.title, (newVal) => {
+  if (!isEditingTitle.value) {
+    titleInput.value = newVal || ''
+  }
+})
+
+const startEditTitle = () => {
+  titleInput.value = props.title || ''
+  isEditingTitle.value = true
+  nextTick(() => {
+    titleInputRef.value?.focus()
+    titleInputRef.value?.select()
+  })
+}
+
+const confirmTitle = () => {
+  const newTitle = (titleInput.value || '').trim() || '数字看板系统'
+  isEditingTitle.value = false
+  emit('update:title', newTitle)
+}
+
+const cancelEdit = () => {
+  isEditingTitle.value = false
+  titleInput.value = props.title || ''
+}
 
 // 方法
 const onSearch = () => {
@@ -388,6 +439,13 @@ onUnmounted(() => {
 
 .title-text {
   @apply text-xl font-semibold;
+  color: var(--color-text);
+}
+
+.title-input {
+  @apply text-xl font-semibold px-2 py-1 rounded border outline-none;
+  background-color: var(--color-background);
+  border-color: var(--color-surface);
   color: var(--color-text);
 }
 

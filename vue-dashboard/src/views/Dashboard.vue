@@ -2,7 +2,7 @@
   <div class="dashboard" :class="{ 'dashboard-fullscreen': isFullscreen }">
     <!-- 工具栏 -->
     <Toolbar
-      :title="dashboardTitle"
+      v-model:title="dashboardTitle"
       :show-search="false"
       :sidebar-visible="sidebarVisible"
       @sidebar-toggle="toggleSidebar"
@@ -162,7 +162,8 @@ const themeStore = useThemeStore()
 const authStore = useAuthStore()
 
 // 响应式数据
-const dashboardTitle = ref('Vue 数字看板系统')
+const defaultDashboardTitle = import.meta.env.VITE_APP_TITLE || '数字看板系统'
+const dashboardTitle = ref(defaultDashboardTitle)
 const sidebarVisible = ref(false) // 默认隐藏侧边栏
 const sidebarCollapsed = ref(false)
 const isFullscreen = ref(false)
@@ -626,6 +627,12 @@ const closeNotification = () => {
 onMounted(async () => {
   console.log('Dashboard mounted')
 
+  // 初始化标题（本地优先，环境变量次之）
+  const savedTitle = localStorage.getItem('dashboard:title')
+  if (savedTitle && savedTitle.length > 0) {
+    dashboardTitle.value = savedTitle
+  }
+
   // 检查认证状态
   if (!(await authStore.restoreFromStorage())) {
     router.push('/login')
@@ -685,6 +692,15 @@ onMounted(async () => {
 
 onUnmounted(() => {
   console.log('Dashboard unmounted')
+})
+
+// 持久化自定义标题
+watch(dashboardTitle, (newTitle) => {
+  try {
+    localStorage.setItem('dashboard:title', newTitle || '')
+  } catch (e) {
+    console.warn('标题持久化失败', e)
+  }
 })
 
 // 🆕 监听用户变化，自动恢复对应的布局

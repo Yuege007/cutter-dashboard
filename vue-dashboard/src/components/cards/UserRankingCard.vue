@@ -65,7 +65,7 @@
     <template v-else-if="mode === 'compact'">
       <div class="compact-view">
         <div class="compact-header">
-          <h3 class="compact-title">最近7天领用 Top 5</h3>
+          <h3 class="compact-title">{{ compactTitle }}</h3>
           <div class="time-range">{{ formatTimeRange(timeRange) }}</div>
         </div>
         <div class="chart-container" ref="chartContainer">
@@ -216,7 +216,7 @@ const allUsers = ref<User[]>([])
 
 // Mini视图轮播相关
 const currentRankIndex = ref(0)
-const carouselTimer = ref<NodeJS.Timeout | null>(null)
+const carouselTimer = ref<ReturnType<typeof setInterval> | null>(null)
 const carouselTransition = ref('slide-fade')
 
 // 工具函数 - 提前定义
@@ -407,6 +407,13 @@ const {
 })
 
 const timeRange = computed(() => getTimeRange(selectedTimeRange.value))
+
+// Compact 标题动态映射 Full 的选择（今日/最近7天）
+const compactTitle = computed(() => {
+  return selectedTimeRange.value === 'today'
+    ? '今日领用 Top 5'
+    : '最近7天领用 Top 5'
+})
 
 const topUser = computed(() => userRankings.value[0] || null)
 

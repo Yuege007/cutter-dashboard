@@ -33,10 +33,10 @@
     <template v-else-if="mode === 'compact'">
       <div class="compact-view">
         <div class="compact-header">
-          <h3 class="compact-title">最近7天趋势</h3>
+          <h3 class="compact-title">{{ compactTitle }}</h3>
           <div v-if="!apiError" class="week-summary">
-            <span class="summary-item in">入库: {{ weekInTotal }}</span>
-            <span class="summary-item out">出库: {{ weekOutTotal }}</span>
+            <span class="summary-item in">入库: {{ compactInTotal }}</span>
+            <span class="summary-item out">出库: {{ compactOutTotal }}</span>
           </div>
         </div>
         <div class="chart-container">
@@ -46,9 +46,9 @@
             <div class="error-detail">{{ apiError }}</div>
           </div>
           <v-chart
-            v-else-if="weekTrendData.length > 0"
+            v-else-if="compactTrendData.length > 0"
             class="trend-chart"
-            :option="weekChartOption"
+            :option="compactChartOption"
             autoresize
           />
           <EmptyState v-else description="暂无数据" icon="📈" size="sm" />
@@ -189,12 +189,18 @@ const rankingTitle = computed(() => {
   return `最近${days}天出库物料 Top 5`
 })
 
+// Compact 视图标题根据 Full 的选择动态变化
+const compactTitle = computed(() => {
+  const days = parseInt(selectedTimeRange.value)
+  return `最近${days}天趋势`
+})
+
 // 数据加载状态
 const dataLoaded = ref(false)
 const apiError = ref<string | null>(null)
 
-// 计算属性 - 7天趋势图配置
-const weekChartOption = computed(() => {
+// Compact 视图趋势图配置（根据选择周期动态渲染）
+const compactChartOption = computed(() => {
   // 使用响应式的主题状态
   const isDark = themeStore.isDarkMode
   
@@ -241,7 +247,7 @@ const weekChartOption = computed(() => {
     },
     xAxis: {
       type: 'category',
-      data: weekTrendData.value.map(item => item.date),
+      data: compactTrendData.value.map(item => item.date),
       axisLabel: {
         fontSize: 11,
         color: textColor
@@ -273,7 +279,7 @@ const weekChartOption = computed(() => {
       {
         name: '入库',
         type: 'line',
-        data: weekTrendData.value.map(item => item.inCount),
+        data: compactTrendData.value.map(item => item.inCount),
         smooth: true,
         itemStyle: {
           color: successColor
@@ -285,7 +291,7 @@ const weekChartOption = computed(() => {
       {
         name: '出库',
         type: 'line',
-        data: weekTrendData.value.map(item => item.outCount),
+        data: compactTrendData.value.map(item => item.outCount),
         smooth: true,
         itemStyle: {
           color: dangerColor
@@ -711,6 +717,13 @@ const recomputeFullFromStore = (days: number, payload: any) => {
     .slice(0, 5)
     .map((item, index) => ({ id: index + 1, ...item }))
 }
+
+// Compact 视图数据选择与汇总（7/15/30天自适应）
+const compactTrendData = computed(() => selectedTimeRange.value === '7' ? weekTrendData.value : fullTrendData.value)
+const fullInTotal = computed(() => fullTrendData.value.reduce((sum, d) => sum + d.inCount, 0))
+const fullOutTotal = computed(() => fullTrendData.value.reduce((sum, d) => sum + d.outCount, 0))
+const compactInTotal = computed(() => selectedTimeRange.value === '7' ? weekInTotal.value : fullInTotal.value)
+const compactOutTotal = computed(() => selectedTimeRange.value === '7' ? weekOutTotal.value : fullOutTotal.value)
 
 // 订阅：7天（week-pickups）用于 Compact 以及 Full 选择“7”时更新
 watch(

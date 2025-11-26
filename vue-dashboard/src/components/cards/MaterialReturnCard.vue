@@ -22,7 +22,7 @@
     <template v-else-if="mode === 'compact'">
       <div class="compact-view">
         <div class="compact-header">
-          <h3 class="compact-title">最近归还记录</h3>
+          <h3 class="compact-title">{{ compactTitle }}</h3>
           <div class="time-info">{{ formatTimeRange() }}</div>
         </div>
         <div class="return-list">
@@ -312,6 +312,13 @@ watch(
 
 const totalItems = computed(() => {
   return returnRecords.value.reduce((sum, record) => sum + record.payNum, 0)
+})
+
+// Compact 标题动态映射 Full 的选择（今日/本周）
+const compactTitle = computed(() => {
+  return selectedTimeRange.value === 'today'
+    ? '今日归还记录'
+    : '本周归还记录'
 })
 
 const formatTime = (timeStr: string | null | undefined): string => {

@@ -161,7 +161,7 @@ const eventContainer = ref<HTMLElement>()
 const monitor = getCacheMonitor()
 
 // 定时器
-let refreshTimer: NodeJS.Timeout | null = null
+let refreshTimer: ReturnType<typeof setInterval> | null = null
 
 // 方法
 const toggleMonitoring = () => {

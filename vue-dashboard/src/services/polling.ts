@@ -16,7 +16,7 @@ interface PollingTask {
 
 class PollingService {
   private tasks = new Map<string, PollingTask>()
-  private timers = new Map<string, NodeJS.Timeout>()
+  private timers = new Map<string, ReturnType<typeof setInterval>>()
   private isRunning = false
 
   // 添加轮询任务

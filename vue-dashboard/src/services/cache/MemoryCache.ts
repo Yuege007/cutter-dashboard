@@ -19,7 +19,7 @@ export class MemoryCache implements ICache {
   private readonly maxSize: number
   private readonly maxMemory: number
   private readonly cleanupInterval: number
-  private cleanupTimer?: NodeJS.Timeout
+  private cleanupTimer?: ReturnType<typeof setInterval>
   
   constructor(options: {
     maxSize?: number

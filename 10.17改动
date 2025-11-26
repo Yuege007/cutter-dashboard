@@ -1,0 +1,144 @@
+10.17 改动说明（详版）
+
+变更总览
+- 累计改动 11 个文件：核心组件 3 个（趋势/排名/归还卡），配置与文档 3 个（.gitignore/.env.example/README.md），其余为依赖锁与构建相关文件。
+- 目标：使中视图（Compact）与 max 视图（Full）在时间周期上保持同步，同时统一标题文案，确保文案与数据源一致。
+
+代码改动详解
+- InOutTrendCard.vue（入出库趋势卡）
+  - 模板（Compact 视图）：
+    - 标题由静态文案改为动态绑定 `{{ compactTitle }}`，随 Full 的 `selectedTimeRange`（7/15/30）变化展示“最近X天趋势”。
+    - 图表绑定改为 `:option="compactChartOption"`，数据源为 `compactTrendData`（7 天走 `weekTrendData`，15/30 天走 `fullTrendData`）。
+    - 汇总展示改为使用 `compactInTotal` 与 `compactOutTotal`，与所选周期一致（7 天用 `weekInTotal/weekOutTotal`，15/30 天用 `fullInTotal/fullOutTotal`）。
+  - 脚本：
+    - 新增 `compactTitle`（computed）：根据 `selectedTimeRange` 返回“最近7/15/30天趋势”。
+    - 新增 `compactTrendData`（computed）：`selectedTimeRange==='7'` 返回 `weekTrendData`，否则返回 `fullTrendData`。
+    - 新增 `fullInTotal/fullOutTotal` 与 `compactInTotal/compactOutTotal`（computed）：与所选周期对应的入/出库汇总数。
+    - 将固定的 `weekChartOption` 替换为自适应的 `compactChartOption`：
+      - 颜色与样式从主题 `themeStore.isDarkMode` 派生，统一 tooltip、axisPointer、grid、axis、series 样式。
+      - series 双折线（出库/入库）与数据集保持一致。
+  - 订阅/数据管道：
+    - 保留并明确周期订阅：`week-pickups`、`15days-pickups`、`30days-pickups`，当 Full 选择对应周期时触发 `recomputeFullFromStore`，7 天同时维护 `weekTrendData` 以支持 Compact。
+
+- UserRankingCard.vue（领用排行榜）
+  - 模板（Compact 视图）：
+    - 标题由静态“最近7天领用 Top 5”改为 `{{ compactTitle }}`。
+    - 右侧时间文案仍为 `{{ formatTimeRange(timeRange) }}`，与当前 `selectedTimeRange` 计算出的时间段一致。
+  - 脚本：
+    - 新增 `compactTitle`（computed）：`selectedTimeRange==='today'` 显示“今日领用 Top 5”，否则显示“最近7天领用 Top 5”。
+    - 维持 `selectedTimeRange`（'today' | 'week'）作为单一真源；`timeRange` 通过 `getTimeRange(selectedTimeRange.value)` 计算。
+    - 排行数据生成逻辑（`fetchRankingData` + 聚合 +排序 Top N）保持不变，确保仅同步标题与时间周期。
+    - 订阅保持：`today-pickups` / `week-pickups` 在对应选择下触发 `recomputeRankingsFromStore`，避免跨周期覆盖。
+
+- MaterialReturnCard.vue（归还记录卡）
+  - 模板（Compact 视图）：
+    - 标题由静态“最近归还记录”改为 `{{ compactTitle }}`。
+    - 右侧时间文案仍为 `{{ formatTimeRange() }}`，返回“今日/本周”。
+  - 脚本：
+    - 新增 `compactTitle`（computed）：`selectedTimeRange==='today'` 显示“今日归还记录”，否则显示“本周归还记录”。
+    - 保留“最近归还记录列表”的语义（非 Top 5 按量排序），维持当前展示逻辑。
+    - 订阅保持：`today-returns` / `week-returns` 仅在对应周期更新列表，避免错误覆盖。
+
+视图同步行为（单一真源）
+- 趋势卡：Full 选择 7/15/30 天 → Compact 标题/数据/汇总同步映射对应管道。
+- 排名卡：Full 选择 今日/最近7天 → Compact 标题动态为“今日/最近7天领用 Top 5”。
+- 归还卡：Full 选择 今日/本周 → Compact 标题动态为“今日/本周归还记录”。
+
+配置与文档改动
+- `.gitignore`：新增忽略 `.env`、`.env.local`、`.env.*.local` 等敏感文件；保留并跟踪 `.env.example`。
+- `.env.example`：提供示例变量（如 `VITE_API_BASE_URL`、`VITE_POLL_INTERVAL_MS`、`VITE_THEME`、`VITE_ENABLE_DEVTOOLS` 等），便于团队配置环境。
+- `README.md`：新增环境配置说明（复制 `.env.example` 为 `.env` 并设置关键变量），提醒 `.env` 被忽略且不应提交到仓库。
+
+仓库与开发
+- 远程仓库已配置并推送：`https://github.com/Yuege007/vue-dashboard.git`（`origin/main`）。
+- 本地启动验证：
+  - `npm install`
+  - `npm run dev`
+  - 访问 `http://localhost:3000/` 验证标题与数据周期同步。
+
+验证清单（开发/测试）
+- 趋势卡：切换 Full 的 7/15/30，检查 Compact 标题、曲线数据、入/出库汇总是否同步变化，主题切换样式正常。
+- 排名卡：在 Full 中切换 今日/最近7天，检查 Compact 标题与右侧时间段文案是否对应；Top 5 数据正确。
+- 归还卡：在 Full 中切换 今日/本周，检查 Compact 标题与右侧文案；列表按最近归还时间排序，订阅只在对应周期更新。
+- 环境：`.env` 未入库，复制 `.env.example` 后可正常运行。
+
+注意事项 / 边界
+- 归还卡目前周期为“今日/本周”（非滚动 7 天），若未来改为“最近7天”，需同步调整 `formatTimeRange()` 与标题文案。
+- 趋势卡的 Top 5 区域可在入库数据就绪后区分“入库/出库”，以提升信息清晰度。
+- 由于 API 限制，用户排行的“最近7天”仅拉取 7 天数据；“今日”时启用更频繁的轮询确保实时性。
+
+概要
+- 目标：同步 max 与中视图的时间周期，统一标题文案，确保数据与文案一致；完善环境与文档以便安全推送 GitHub。
+
+核心业务改动
+- InOutTrendCard.vue：
+  - 中视图标题改为动态：compactTitle 随 selectedTimeRange 显示“最近7/15/30天趋势”。
+  - 中视图数据与 Full 周期同步：compactTrendData 在 7 天用 weekTrendData，在 15/30 天用 fullTrendData。
+  - 汇总数值同步：compactInTotal、compactOutTotal 与 Full 周期一致。
+  - 图表配置统一：将固定 weekChartOption 改为自适应 compactChartOption，深/浅色主题样式与 Full 一致。
+
+- UserRankingCard.vue：
+  - 中视图标题改为动态：compactTitle 随 Full 的 selectedTimeRange 显示“今日领用 Top 5”或“最近7天领用 Top 5”。
+  - 时间范围文案使用 formatTimeRange(timeRange)，保证与当前数据周期一致。
+  - 排行数据与图表配置保持不变，确保标题与周期的单一真源同步。
+
+- MaterialReturnCard.vue：
+  - 中视图标题改为动态：compactTitle 随 Full 的 selectedTimeRange 显示“今日归还记录”或“本周归还记录”。
+  - 保持列表语义为最近归还记录，未改为 Top 5；轮询仅在对应周期更新，避免数据被覆盖。
+
+配置与文档改动
+- .gitignore：忽略 .env、.env.local、.env.*.local 等敏感文件，保留 .env.example。
+- .env.example：新增示例变量（如 VITE_API_BASE_URL、VITE_POLL_INTERVAL_MS 等），提供配置指引。
+- README.md：加入环境配置说明（复制 .env.example 为 .env 并设置关键变量），强调 .env 被忽略。
+
+仓库与开发
+- 已设置远程并推送 main 分支到 GitHub：https://github.com/Yuege007/vue-dashboard.git。
+- 启动与验证：npm install 后运行 npm run dev，在 http://localhost:3000/ 进行预览与确认。
+
+改动文件列表（主要）
+- vue-dashboard/src/components/cards/InOutTrendCard.vue
+- vue-dashboard/src/components/cards/UserRankingCard.vue
+- vue-dashboard/src/components/cards/MaterialReturnCard.vue
+- vue-dashboard/.gitignore
+- vue-dashboard/.env.example
+- vue-dashboard/README.md
+- 备注：依赖安装可能更新 package-lock.json 等非业务文件。
+
+验证要点
+- 切换 Full 视图时间：趋势卡 7/15/30；排名卡 今日/最近7天；归还卡 今日/本周；观察中视图标题与数据是否一致。
+- 深色/浅色主题下图表样式自适应正常。
+- .env 未入库，按 .env.example 配置即可运行。
+
+后续建议
+- 排名卡中视图加入“今日/最近7天”切换控件，与 Full 使用同一状态源。
+- 如将归还卡改为滚动“最近7天”，同步调整标题与数据逻辑。
+- 趋势卡待入库数据就绪后，在 Top 5 区域区分“入库/出库”。
+
+追加改动（类型优化与标题配置）
+- 标题配置与持久化
+  - Toolbar 支持标题双击编辑：回车确认、Esc 取消、失焦保存。
+  - 通过 `v-model:title` 与 `Dashboard.vue` 的 `dashboardTitle` 双向绑定。
+  - 标题初始化优先级：`localStorage` → 环境变量 `VITE_APP_TITLE` → 默认值“数字看板系统”。
+  - 默认标题更新：`.env.example` 中设置 `VITE_APP_TITLE="数字看板系统"`，作为团队示例配置。
+  - 使用说明：双击标题进入编辑；如清空后将回退至默认标题。
+
+- 轮询服务与类型优化
+  - 统一将类型 `NodeJS.Timeout` 替换为 `ReturnType<typeof setInterval>` / `ReturnType<typeof setTimeout>`，适配浏览器类型系统。
+  - 原因：项目基于 DOM tsconfig（不包含 Node 类型）；在浏览器中 `setInterval` 返回 `number`，与 `NodeJS.Timeout` 不兼容。
+  - 受影响文件：
+    - `vue-dashboard/src/services/polling.ts`
+    - `vue-dashboard/src/services/cache/MemoryCache.ts`
+    - `vue-dashboard/src/components/debug/CacheDebugPanel.vue`
+    - `vue-dashboard/src/components/cards/UserRankingCard.vue`
+    - `vue-dashboard/src/services/cache/utils.ts`
+    - `vue-dashboard/src/utils/index.ts`
+  - 行为影响：仅类型层面优化，不改变运行时逻辑；`clearInterval/clearTimeout` 用法保持一致。
+
+- 验证与说明
+  - 开发预览：`npm run dev` → 访问 `http://localhost:3000/`，双击标题可编辑且刷新后持久化。
+  - 静态扫描：全局确认无 `NodeJS.Timeout` 残留引用。
+  - 类型检查工具提示：`vue-tsc` 在 Node v22 环境下存在已知兼容问题（非业务代码导致），可选择升级 `vue-tsc` 或使用 Node v20 以通过 `npm run type-check`。
+
+- 重置与回退
+  - 清除 `localStorage` 键 `dashboard:title` 可恢复默认标题。
+  - 如需临时禁用标题编辑，可在 `Toolbar.vue` 移除输入框与编辑状态逻辑，保留只读标题展示。
