@@ -2,11 +2,14 @@
   <div class="dashboard" :class="{ 'dashboard-fullscreen': isFullscreen }">
     <!-- 工具栏 -->
     <Toolbar
+      v-show="!(isFullscreen && toolbarHidden)"
       v-model:title="dashboardTitle"
       :show-search="false"
       :sidebar-visible="sidebarVisible"
+      :auto-hide-locked="autoHideLocked"
       @sidebar-toggle="toggleSidebar"
       @fullscreen-toggle="handleFullscreenToggle"
+      @lock-toolbar-toggle="autoHideLocked = !autoHideLocked"
       @save-layout="handleSaveLayout"
       @load-layout="handleLoadLayout"
       @export-dashboard="handleExportDashboard"
@@ -167,6 +170,13 @@ const dashboardTitle = ref(defaultDashboardTitle)
 const sidebarVisible = ref(false) // 默认隐藏侧边栏
 const sidebarCollapsed = ref(false)
 const isFullscreen = ref(false)
+const toolbarHidden = ref(false)
+const autoHideLocked = ref(false)
+const mouseMoveHandler = (e: MouseEvent) => {
+  if (!isFullscreen.value || autoHideLocked.value) return
+  const threshold = 72
+  toolbarHidden.value = e.clientY > threshold
+}
 
 // 模态框状态
 const previewCard = ref<CardConfig | null>(null)
@@ -209,7 +219,27 @@ const toggleSidebar = () => {
 
 const handleFullscreenToggle = () => {
   isFullscreen.value = !isFullscreen.value
+  if (isFullscreen.value) {
+    toolbarHidden.value = !autoHideLocked.value
+    window.addEventListener('mousemove', mouseMoveHandler)
+  } else {
+    toolbarHidden.value = false
+    window.removeEventListener('mousemove', mouseMoveHandler)
+  }
 }
+
+watch(autoHideLocked, (locked) => {
+  if (locked) {
+    toolbarHidden.value = false
+    window.removeEventListener('mousemove', mouseMoveHandler)
+  } else if (isFullscreen.value) {
+    window.addEventListener('mousemove', mouseMoveHandler)
+  }
+})
+
+onUnmounted(() => {
+  window.removeEventListener('mousemove', mouseMoveHandler)
+})
 
 const handleCardAdd = (cardType: string, position?: { x: number; y: number }) => {
   try {
@@ -353,6 +383,26 @@ const getPlaceholderStyle = () => {
   }
 }
 
+// 自动保存防抖：为每个用户维护最近一次布局和定时器
+const pendingSaveTimers = new Map<number, ReturnType<typeof setTimeout>>()
+const lastLayouts = new Map<number, LayoutItem[]>()
+const AUTO_SAVE_DELAY = 300
+
+const scheduleAutoSave = (userId: number, userName: string, layout: LayoutItem[]) => {
+  lastLayouts.set(userId, layout)
+  const existing = pendingSaveTimers.get(userId)
+  if (existing) clearTimeout(existing)
+  const timer = setTimeout(async () => {
+    try {
+      const latest = lastLayouts.get(userId) || layout
+      await layoutPersistence.saveUserLayout(userId, userName, latest, true)
+    } catch (error) {
+      console.error('自动保存失败:', error)
+    }
+  }, AUTO_SAVE_DELAY)
+  pendingSaveTimers.set(userId, timer)
+}
+
 const handleLayoutUpdated = async (layout: LayoutItem[]) => {
   // 布局更新时自动保存到用户配置
   if (authStore.user) {
@@ -370,10 +420,11 @@ const handleLayoutUpdated = async (layout: LayoutItem[]) => {
         maxH: card.config.maxSize?.h,
         static: card.locked || false,
         isDraggable: card.config.resizable !== false,
-        isResizable: card.config.resizable !== false
+        isResizable: card.config.resizable !== false,
+        lockedMode: card.lockedMode
       }))
 
-      await layoutPersistence.saveUserLayout(
+      scheduleAutoSave(
         authStore.user.id,
         authStore.user.userName || authStore.user.name,
         currentLayout
@@ -411,11 +462,10 @@ const handleItemRemoved = async (itemId: string) => {
         isResizable: card.config.resizable !== false
       }))
 
-      await layoutPersistence.saveUserLayout(
+      scheduleAutoSave(
         authStore.user.id,
         authStore.user.userName || authStore.user.name,
         currentLayout
-        // 默认silent=true，不显示日志
       )
     } catch (error) {
       console.error('删除卡片后保存布局失败:', error)
@@ -455,7 +505,8 @@ const handleSaveLayout = async () => {
       maxH: card.config.maxSize?.h,
       static: card.locked || false,
       isDraggable: card.config.resizable !== false,
-      isResizable: card.config.resizable !== false
+      isResizable: card.config.resizable !== false,
+      lockedMode: card.lockedMode
     }))
 
     await layoutPersistence.saveUserLayout(
@@ -504,6 +555,12 @@ const handleLoadLayout = async () => {
               w: layoutItem.w,
               h: layoutItem.h
             })
+            // 恢复锁定模式（若有）
+            const card = cardStore.getCard(instanceId)
+            if (card) {
+              card.lockedMode = layoutItem.lockedMode
+              cardStore.saveToLocalStorage()
+            }
           }
         } catch (error) {
           console.warn(`⚠️ 跳过无效卡片: ${layoutItem.i}`, error)
@@ -672,6 +729,12 @@ onMounted(async () => {
                 w: layoutItem.w,
                 h: layoutItem.h
               })
+              // 恢复锁定模式（若有）
+              const card = cardStore.getCard(instanceId)
+              if (card) {
+                card.lockedMode = layoutItem.lockedMode
+                cardStore.saveToLocalStorage()
+              }
               restoredCount++
             }
           } catch (error) {
@@ -692,6 +755,20 @@ onMounted(async () => {
 
 onUnmounted(() => {
   console.log('Dashboard unmounted')
+  // 组件卸载前，刷新一次待保存的布局
+  const user = authStore.user
+  if (user) {
+    const timer = pendingSaveTimers.get(user.id)
+    if (timer) {
+      clearTimeout(timer)
+      pendingSaveTimers.delete(user.id)
+      const latest = lastLayouts.get(user.id)
+      if (latest && latest.length > 0) {
+        layoutPersistence.saveUserLayout(user.id, user.userName || user.name, latest, true)
+          .catch(err => console.error('卸载前保存失败:', err))
+      }
+    }
+  }
 })
 
 // 持久化自定义标题

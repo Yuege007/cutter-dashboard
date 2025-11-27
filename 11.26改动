@@ -1,0 +1,186 @@
+11.26改动 — 本地保存优化方案与实施说明
+
+目标
+- 在不改变现有运行时逻辑的前提下，提升卡片布局的本地持久化稳定性与用户体验。
+- 控制写入频率、监控和处理 localStorage 容量问题，确保刷新/重登后布局稳定恢复。
+- 保持仅保存“布局元数据”的原则，与业务数据解耦，并为后续扩展（IndexedDB/后端同步）预留空间。
+
+当前行为简述
+- 保存介质：通过缓存管理器持久化到 localStorage，键：`user_layout_${userId}`，TTL 30 天，包含 `version` 和 `lastSaved`。
+- 自动保存：拖拽/缩放（`layout-updated`）、删除卡片后静默保存；手动“保存布局”时显式保存并提示。
+- 恢复流程：登录进入仪表盘或用户切换时自动恢复；刷新后直接呈现保存布局。
+- 兼容项：旧键 `dashboard-cards` 仍写入，但恢复流程已由用户维度布局接管。
+
+优化项（此次改动）
+1) 保存防抖
+- 将自动保存（拖拽/缩放/删除触发）统一通过 300ms 防抖执行，减少高频写入与潜在阻塞。
+- 防抖方法：以 `userId` 作为键，`leading=false, trailing=true`；在页面卸载前追加一次“强制刷新”保存（保证最后状态落盘）。
+
+2) 容量监控与异常处理
+- 在保存前估算 localStorage 占用并设置阈值（例如 80%）。接近阈值时给出非打断式提示（轻提示/角标）。
+- 捕获 `QuotaExceededError`：提示“存储空间不足，当前变更未保存”，提供“清理缓存”与“导出布局”入口。
+- 清理策略：使用缓存管理器清理非布局类键（API缓存、用户配置缓存等），保留 `user_layout_` 相关键。
+
+3) 键与结构规范化
+- 保持键：`user_layout_${userId}`；预留多工作区/方案扩展为 `user_layout_${userId}:${workspaceId}`（本次不启用）。
+- 布局项仅保存元数据：`i, x, y, w, h, minW, minH, maxW?, maxH?, static?, isDraggable?, isResizable?`。
+- 版本号升级为 `1.1`：用于区分防抖与容量管理优化后的格式（结构未变）。
+
+4) 兼容与迁移
+- 读取时向后兼容旧版本（<1.1）：结构一致无需转换；若发现数据损坏（字段缺失），清理并跳过恢复。
+- 仍保留旧键写入（`dashboard-cards`），但不用于恢复；后续可逐步停写以降低冗余。
+
+5) 用户体验
+- 自动保存保持静默；失败时仅在控制台记录并显示轻提示，避免打断用户拖拽/布局过程。
+- 手动保存显式反馈成功/失败；新增“导出布局/导入布局/重置布局”入口，便于用户自助处理异常。
+
+6) 测试用例与验收
+- 高频拖拽/缩放：验证在 300ms 防抖下保存次数减少但最终状态正确落盘。
+- 容量接近与超限：通过填充其他键模拟超限，验证提示与清理效果，确保保存失败时不覆盖旧布局。
+- 刷新与重登：验证恢复稳定；多用户切换时能恢复各自布局。
+- 兼容性：Chrome/Edge/Firefox/Safari（含 iOS）验证基本行为一致，隐私模式下仅会话级保存（如适用）。
+
+不变更项
+- 不保存接口/业务数据、图表数据；仍由卡片订阅/轮询机制获取。
+- 不单独保存显示模式；继续由 `w,h` 自动推导（mini/compact/full）。
+- 主题与其他本地配置保持现状，布局优化不会影响其读写。
+
+落地实施建议（代码层面）
+- 在 `Dashboard.vue` 的保存触发处（`handleLayoutUpdated`、`handleItemRemoved`）：
+  - 引入防抖保存方法（封装 `layoutPersistence.saveUserLayout`）。
+  - 页面卸载（`onUnmounted`）时执行一次“立即保存”（如果防抖队列有待执行）。
+- 在 `LayoutPersistenceService.saveUserLayout`：
+  - 捕获并识别 `QuotaExceededError`，返回明确错误码/消息。
+  - （可选）增加 `getUsageStats()` 帮助页面层做容量提示。
+- 在工具栏或设置面板：
+  - 增加“导出布局/导入布局/重置布局”入口。
+  - 提供“清理缓存（保留布局）”操作，调用缓存管理器清理非布局键。
+
+后续扩展（不在本次改动范围内）
+- IndexedDB 持久化：更大容量，适合复杂场景；与 localStorage 保持读写接口一致，便于切换。
+- 后端持久化：支持跨设备同步、方案共享与权限控制；沿用用户/工作区/方案键设计。
+- 分析与可观测性：收集保存失败次数、容量阈值触发情况，用于持续优化。
+
+里程碑与回滚策略
+- 11.26：完成防抖与容量处理，加入导出/导入/重置入口。
+- 若出现异常：
+  - 可快速回滚至 11.25 之前的保存逻辑（移除防抖与容量提示）。
+  - 保留用户布局键，避免数据丢失。
+
+备注
+- 本次为“类型与行为的非侵入式优化”，不改变现有卡片、布局、缓存的主流程；与之前 10.17 改动类似，保持运行时逻辑的一致性。
+
+新增优化（卡片删除与刷新清理策略）
+
+背景与目标
+- 删除卡片时，清理该卡片关联的缓存数据，但保留整体布局；刷新页面时，仅保留卡片布局与轻量偏好配置，清理其他重数据缓存。
+
+核心原则
+- 布局持久化（保留）：保存到 `localStorage` 的仅为布局元数据与轻量偏好，如 `user_layout_${userId}`、`user_preferences`、`card_configs`。
+- 数据临时（可清理）：业务数据、接口响应、大型表格/图表数据归为“重数据”，按需清理，不参与布局恢复。
+
+键命名约定
+- 卡片数据键：`card:<cardId>:<dataType>:<resource>`（或包含实例维度 `card::<instanceId>:...`），便于前缀/正则精准清理。
+- 布局与偏好键：`user_layout_${userId}`、`user_preferences`、`card_configs`，与 `card:` 键分离，避免误删。
+
+卡片删除时的清理（已实现）
+- 触发位置：`src/stores/card.ts` 的 `removeCard`。
+- 处理流程：
+  - 从内存结构移除卡片实例与数据。
+  - 调用缓存管理器按前缀/正则清理与该卡片关联的键：
+    - `card:<cardId>:`（当存在 `cardId`）
+    - `card::${instanceId}:`（当仅存在实例维度）
+  - 保留布局/偏好键（如 `user_layout_*`），不受影响。
+
+刷新时的清理（按开关，已实现）
+- 触发位置：`src/main.ts` 的应用初始化（`initializeApp`）早期。
+- 开关：`VITE_CACHE_CLEAN_ON_REFRESH`（默认 `false`）。当为 `true` 时：
+  - 按数据分类清理重数据：`largeDataset`、`apiResponse`。
+  - 清理所有 `card:` 前缀的键（卡片数据），保留 `user_layout_*`、`user_preferences` 等白名单键。
+
+环境变量与默认行为
+- `VITE_CACHE_HEAVY_USE_IDB`（默认 `false`）：重数据仅保存在内存；当设为 `true` 时，重数据使用 IndexedDB 持久化。
+- `VITE_CACHE_CLEAN_ON_REFRESH`（默认 `false`）：关闭时保留离线能力；开发联调时可开启以保证刷新后“干净”数据状态。
+- 样例已添加至 `.env.example`：`VITE_CACHE_CLEAN_ON_REFRESH=false`。
+
+使用与验证建议
+- 删除卡片后：确认布局未变、卡片关联数据键已清理（`card:` 前缀不再存在）。
+- 刷新页面（开启开关）：确认布局与偏好保留，重数据重新拉取；`localStorage`/IndexedDB 占用下降。
+- 刷新页面（关闭开关）：离线数据与缓存保留，适合演示/弱网场景。
+
+影响评估
+- 首屏加载：重数据清理后，首屏可能等待接口返回；布局恢复不受影响。
+- 存储压力：`localStorage` 不再累积重数据（仅保留布局与轻量偏好），容量压力显著降低。
+- 离线能力：根据开关选择；默认保留离线缓存能力。
+
+代码触点
+- `src/stores/card.ts`：在 `removeCard` 中调用缓存清理，按 `cardId`/`instanceId` 前缀或正则清理关联数据。
+- `src/main.ts`：启动阶段按开关清理重数据分类与 `card:` 前缀，保留白名单。
+- `.env.example`：新增 `VITE_CACHE_CLEAN_ON_REFRESH=false` 开关样例。
+
+回滚与安全
+- 关闭 `VITE_CACHE_CLEAN_ON_REFRESH` 即可回到“保留缓存”的刷新行为。
+- 若需停用删除时数据清理，可暂时移除 `removeCard` 中的缓存清理调用（不建议）。
+
+补充修复（模式锁定磁钉高亮持久化）
+
+问题现象
+- 卡片在点击“模式锁定（磁钉）”后为高亮状态，但刷新页面后鼠标悬停出现工具栏时，磁钉不再高亮。
+- 受影响卡片：物料归还追踪、领用排行榜、物料库存总览（同类卡片可能受影响）。
+
+根因定位
+- 在 `<script setup>` 下使用了 `const props = defineProps<BaseCardProps>()`，但模板中 `<BaseCard>` 的 `:mode-locked` 与 `:forced-mode` 绑定使用了裸变量 `modeLocked`/`forcedMode`，未通过 `props` 访问，导致传入 `BaseCard` 的值为 `undefined`。
+- `BaseCard` 的磁钉高亮由内部状态 `isModeLocked` 控制，并由 `watch(() => props.modeLocked)` 同步；若绑定传入为空则刷新后无法维持高亮。
+
+修复方案
+- 统一将模板中的 `<BaseCard>` 绑定改为通过 `props` 传递：
+  - `:mode-locked="props.modeLocked"`
+  - `:forced-mode="props.forcedMode"`
+
+涉及文件
+- `src/components/cards/MaterialReturnCard.vue`
+- `src/components/cards/UserRankingCard.vue`
+- `src/components/cards/MaterialOverviewCard.vue`
+- 统一修正以保持一致性：`InOutTrendCard.vue`、`InventoryAlarmCard.vue`、`CabinetStatusCard.vue`
+
+恢复与传参链路确认
+- 布局层 `GridLayout.vue` 的 `getCardProps()` 将 `card.lockedMode` 同步为：`forcedMode: card.lockedMode` 与 `modeLocked: !!card.lockedMode`。
+- `Dashboard.vue` 在恢复布局时写回 `card.lockedMode = layoutItem.lockedMode`，保证锁定模式持久化。
+- 修复后，刷新页面并悬停出现工具栏时，磁钉应保持高亮，且展示模式受 `forcedMode` 生效。
+
+一致性说明
+- 与“模式自动推导（基于尺寸 w,h 判定 mini/compact/full）”的设计不冲突：锁定仅影响展示与高亮，尺寸仍决定默认模式；锁定模式作为用户偏好被持久化，便于预期一致的刷新行为。
+
+验证建议
+- 在上述卡片点击磁钉进行模式锁定，刷新页面后悬停检查磁钉仍为高亮；切换尺寸验证模式推导仍正常。
+- 如遇仍不高亮的情况，检查对应实例的布局记录中是否存在 `lockedMode`（由 `Dashboard.vue` 与 `GridLayout.vue` 负责恢复与传递）。
+
+新增交互（全屏标题栏自动隐藏与锁定）
+
+需求与行为
+- 全屏后标题栏默认自动隐藏；鼠标移动到页面上方时标题栏自动浮现。
+- 标题栏右侧新增“锁定/解锁自动隐藏”按钮：锁定后标题栏不再随鼠标离开顶部而隐藏；解锁后恢复自动隐藏行为。
+
+交互细节
+- 进入全屏：若未锁定，则隐藏标题栏，并绑定 `window.mousemove` 检测顶部悬停（阈值约 72px）；靠近顶部时显示，离开顶部隐藏。
+- 退出全屏：自动显示标题栏并移除 `mousemove` 监听；锁定状态复位为不影响普通模式。
+- 锁定切换：
+  - 锁定时：立即显示标题栏并移除自动隐藏监听。
+  - 解锁时：在全屏模式下恢复自动隐藏监听与顶部悬停逻辑。
+
+代码触点
+- `src/components/layout/Toolbar.vue`
+  - 新增 `props.autoHideLocked` 控制锁定图标与文案；新增 `lockToolbarToggle` 事件。
+  - 将“隐藏标题栏”按钮改为“锁定/解锁自动隐藏”按钮，图标随状态切换。
+- `src/views/Dashboard.vue`
+  - 新增状态：`autoHideLocked`、`toolbarHidden`，以及 `mouseMoveHandler` 顶部悬停检测。
+  - 在全屏切换时绑定/解绑鼠标移动监听；根据锁定状态决定初始显示/隐藏。
+  - 工具栏显示受 `isFullscreen && toolbarHidden` 控制；向 `Toolbar` 传入 `:auto-hide-locked`，接收 `@lock-toolbar-toggle` 事件。
+
+验证建议
+- 进入全屏后，标题栏自动隐藏；将鼠标移至顶部，标题栏浮现；移开后隐藏。
+- 点击“锁定自动隐藏”，标题栏在全屏状态下保持显示；再次点击解锁，恢复自动隐藏。
+- 退出全屏后标题栏保持显示，且不再监听鼠标移动。
+
+回滚策略
+- 如需回退到“手动隐藏/显示”方案，可去除 `Dashboard.vue` 中的 `mousemove` 悬停逻辑，并将按钮恢复为“隐藏/显示标题栏”。

@@ -11,6 +11,7 @@ import { setupDefaultPollingTasks, pollingService } from '@/services/polling'
 import { useThemeStore } from '@/stores/theme'
 import { useCardStore } from '@/stores/card'
 import { initCacheSystem } from '@/services/cache/init'
+import { getCacheManager, DEFAULT_DATA_CLASSIFICATION } from '@/services/cache'
 
 const app = createApp(App)
 const pinia = createPinia()
@@ -41,6 +42,23 @@ const initializeApp = async () => {
       console.log('✅ 缓存系统初始化成功')
     } else {
       console.warn('⚠️ 缓存系统初始化失败，应用将继续运行但性能可能受影响')
+    }
+
+    // 1.1 刷新后按需清理重数据缓存（保留布局与轻偏好）
+    if (import.meta.env.VITE_CACHE_CLEAN_ON_REFRESH === 'true') {
+      try {
+        const cm = getCacheManager()
+        const { largeDataset, apiResponse } = DEFAULT_DATA_CLASSIFICATION
+        const patterns = [...largeDataset.patterns, ...apiResponse.patterns]
+        for (const p of patterns) {
+          await cm.invalidate(p)
+        }
+        // 同时清理所有卡片数据前缀（不影响布局键）
+        await cm.invalidate('card:')
+        console.log('🧹 已按刷新策略清理重数据缓存（保留布局）')
+      } catch (e) {
+        console.warn('刷新清理缓存失败:', e)
+      }
     }
 
     // 2. 初始化主题

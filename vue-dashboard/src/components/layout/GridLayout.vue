@@ -52,6 +52,7 @@
           @settings="() => configureItem(item.i)"
           @delete="() => removeItem(item.i)"
           @lock="(locked) => handleCardLockRequest(item.i, locked)"
+          @modeLock="(locked, mode) => handleCardModeLock(item.i, locked, mode)"
         />
       </GridItem>
     </GridLayout>
@@ -238,6 +239,9 @@ const getCardProps = (itemId: string) => {
     minHeight: card.config.minSize?.h || 1,
     // 传递锁定状态
     locked: layoutItem?.static || false,
+    // 传递模式锁定：强制模式 & UI状态
+    forcedMode: card.lockedMode || undefined,
+    modeLocked: !!card.lockedMode,
     // 传递拖拽状态
     isDragging: isDragging.value,
     cardId: itemId
@@ -342,6 +346,15 @@ const handleCardLockRequest = (itemId: string, locked: boolean) => {
     if (card) {
       card.locked = locked
     }
+  }
+}
+
+// 处理来自BaseCard的模式锁定请求（磁钉）
+const handleCardModeLock = (itemId: string, locked: boolean, mode: string) => {
+  const card = cardStore.getCard(itemId)
+  if (card) {
+    card.lockedMode = locked ? (mode as any) : undefined
+    // 可选：不修改静态属性，保持可拖拽/可缩放
   }
 }
 

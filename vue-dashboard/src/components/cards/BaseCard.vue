@@ -55,6 +55,20 @@
           </svg>
         </button>
 
+        <!-- 模式锁定（磁钉）按钮 -->
+        <button
+          @click.stop="isDragging ? $event.preventDefault() : handleModeLock()"
+          class="toolbar-btn"
+          :class="{ 'toolbar-btn-active': isModeLocked }"
+          :disabled="isDragging"
+          :title="isModeLocked ? '解除模式锁定' : '模式锁定（磁钉）'"
+        >
+          <!-- Push Pin Icon -->
+          <svg class="toolbar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15.232 5.232l3.536 3.536-3.536 3.536L9 21l1.768-6.232-3.536-3.536 3.536-3.536 4.464-2.464z" />
+          </svg>
+        </button>
+
         <!-- 锁定按钮 -->
         <button
           v-if="shouldShowLock"
@@ -157,6 +171,8 @@ export interface BaseCardProps {
   interactive?: boolean
   locked?: boolean
   isDragging?: boolean
+  // 模式锁定（磁钉）
+  modeLocked?: boolean
 
   // 尺寸相关属性
   width?: number
@@ -192,14 +208,19 @@ const emit = defineEmits<{
   retry: []
   delete: []
   lock: [locked: boolean]
+  modeLock: [locked: boolean, mode: CardMode]
 }>()
 
 // 内部状态
 const isLocked = ref(props.locked)
+const isModeLocked = ref(!!props.modeLocked)
 
 // 监听props.locked的变化
 watch(() => props.locked, (newLocked) => {
   isLocked.value = newLocked
+})
+watch(() => props.modeLocked, (newVal) => {
+  isModeLocked.value = !!newVal
 })
 
 // 尺寸模式检测
@@ -244,6 +265,12 @@ const handleSettings = () => {
 const handleLock = () => {
   isLocked.value = !isLocked.value
   emit('lock', isLocked.value)
+}
+
+const handleModeLock = () => {
+  isModeLocked.value = !isModeLocked.value
+  // 将当前模式一并发出，便于外层保存
+  emit('modeLock', isModeLocked.value, currentMode.value)
 }
 
 const handleDelete = () => {

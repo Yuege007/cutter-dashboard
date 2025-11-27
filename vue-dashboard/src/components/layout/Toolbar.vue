@@ -96,6 +96,20 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
+
+        <button
+          v-if="isFullscreen"
+          @click="toggleLock"
+          class="toolbar-btn"
+          :title="props.autoHideLocked ? '解锁自动隐藏' : '锁定标题栏'"
+        >
+          <svg v-if="props.autoHideLocked" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11c1.657 0 3-1.343 3-3V6a3 3 0 10-6 0v2c0 1.657 1.343 3 3 3zm-6 4a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2H8a2 2 0 01-2-2v-4z" />
+          </svg>
+          <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11a3 3 0 003-3V6a3 3 0 10-6 0v2a3 3 0 003 3zm-6 4h12a2 2 0 012 2v2H4v-2a2 2 0 012-2z" />
+          </svg>
+        </button>
       </div>
 
       <!-- 主题切换 -->
@@ -222,18 +236,21 @@ export interface ToolbarProps {
   breadcrumbs?: string[]
   showSearch?: boolean
   sidebarVisible?: boolean
+  autoHideLocked?: boolean
 }
 
 const props = withDefaults(defineProps<ToolbarProps>(), {
   title: '数字看板系统',
   showSearch: true,
-  sidebarVisible: true
+  sidebarVisible: true,
+  autoHideLocked: false
 })
 
 const emit = defineEmits<{
   search: [query: string]
   sidebarToggle: []
   fullscreenToggle: []
+  lockToolbarToggle: []
   saveLayout: []
   loadLayout: []
   exportDashboard: []
@@ -314,6 +331,10 @@ const toggleFullscreen = () => {
     isFullscreen.value = false
   }
   emit('fullscreenToggle')
+}
+
+const toggleLock = () => {
+  emit('lockToolbarToggle')
 }
 
 const toggleDropdown = () => {

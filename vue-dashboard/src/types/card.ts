@@ -13,6 +13,10 @@ export interface BaseCardProps {
   width: number
   /** 卡片高度（网格单位） */
   height: number
+  /** 强制显示模式（用于模式锁定） */
+  forcedMode?: CardMode
+  /** 模式锁定状态（用于UI提示） */
+  modeLocked?: boolean
 }
 
 // 卡片基础事件接口

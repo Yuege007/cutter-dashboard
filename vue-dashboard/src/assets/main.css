@@ -27,6 +27,20 @@
     --color-surface: #ffffff;
     --color-text: #1e293b;
     --color-text-secondary: #64748b;
+
+    /* 库存分级颜色（浅色主题） */
+    --inv-good: #16a34a;
+    --inv-good-light: #86efac;
+    --inv-warn: #d97706;
+    --inv-warn-light: #fbbf24;
+    --inv-short: #f97316;
+    --inv-short-light: #fdba74;
+    --inv-severe: #dc2626;
+    --inv-severe-light: #f87171;
+    --inv-zero: #e11d48;
+    --inv-zero-light: #fda4af;
+    --inv-track: #e5e7eb;
+    --inv-muted: #64748b;
   }
 
   .theme-light body {
@@ -44,6 +58,20 @@
     --color-surface: #1e293b;
     --color-text: #f1f5f9;
     --color-text-secondary: #cbd5e1;
+
+    /* 库存分级颜色（深色主题） */
+    --inv-good: #22c55e;
+    --inv-good-light: #86efac;
+    --inv-warn: #f59e0b;
+    --inv-warn-light: #fbbf24;
+    --inv-short: #fb923c;
+    --inv-short-light: #fdba74;
+    --inv-severe: #ef4444;
+    --inv-severe-light: #f87171;
+    --inv-zero: #f43f5e;
+    --inv-zero-light: #fb7185;
+    --inv-track: #1f2937;
+    --inv-muted: #94a3b8;
   }
 
   .theme-dark body {
@@ -61,6 +89,20 @@
     --color-surface: #1a1f2e;
     --color-text: #ffffff;
     --color-text-secondary: #a8b2d1;
+
+    /* 库存分级颜色（科技蓝主题，与深色一致） */
+    --inv-good: #22c55e;
+    --inv-good-light: #86efac;
+    --inv-warn: #f59e0b;
+    --inv-warn-light: #fbbf24;
+    --inv-short: #fb923c;
+    --inv-short-light: #fdba74;
+    --inv-severe: #ef4444;
+    --inv-severe-light: #f87171;
+    --inv-zero: #f43f5e;
+    --inv-zero-light: #fb7185;
+    --inv-track: #1f2937;
+    --inv-muted: #a8b2d1;
   }
 
   .theme-tech body {

@@ -47,7 +47,7 @@ export interface UseBaseCardConfig<T> {
  */
 export function useBaseCard<T = any>(
   props: BaseCardProps,
-  emit: any, // 暂时使用 any 类型避免类型冲突
+  emit: any,
   config: UseBaseCardConfig<T>
 ) {
   // 如果提供了自定义Hook，使用自定义逻辑（逃生舱机制）
@@ -56,9 +56,10 @@ export function useBaseCard<T = any>(
     
     // 确保自定义Hook也返回cardTitle
     if (!customResult.cardTitle) {
-      customResult.cardTitle = computed(() => 
-        config.titles[customResult.mode?.value] || config.titles.default
-      )
+      customResult.cardTitle = computed(() => {
+        const modeKey = ((customResult.mode?.value ?? 'default') as keyof CardTitles)
+        return config.titles[modeKey] || config.titles.default
+      })
     }
     
     return customResult
@@ -71,7 +72,7 @@ export function useBaseCard<T = any>(
       emit('error', err.message)
     },
     onModeChange: (newMode: string) => {
-      emit('modeChanged', newMode)
+      emit('modeChanged', newMode as any)
     },
     // 传递高级配置
     ...(config.refreshInterval && { refreshInterval: config.refreshInterval }),
@@ -87,15 +88,24 @@ export function useBaseCard<T = any>(
     cardOptions
   )
 
+  // 支持模式强制覆盖（模式锁定）
+  const forcedMode = toRef(props, 'forcedMode')
+  const effectiveMode = computed(() => forcedMode.value || cardHook.mode.value)
+
   // 统一的标题计算
   const cardTitle = computed(() => {
-    const currentMode = cardHook.mode.value
+    const currentMode = (effectiveMode.value ?? 'default') as keyof CardTitles
     return config.titles[currentMode] || config.titles.default
   })
 
   // 返回增强的结果
   return {
     ...cardHook,
+    // 使用生效模式覆盖原始模式
+    mode: effectiveMode,
+    isMini: computed(() => effectiveMode.value === 'mini'),
+    isCompact: computed(() => effectiveMode.value === 'compact'),
+    isFull: computed(() => effectiveMode.value === 'full'),
     cardTitle
   }
 }

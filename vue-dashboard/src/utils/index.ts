@@ -104,7 +104,8 @@ export const deepClone = <T>(obj: T): T => {
     const clonedObj = {} as T
     for (const key in obj) {
       if (obj.hasOwnProperty(key)) {
-        clonedObj[key] = deepClone(obj[key])
+        const k = key as keyof T
+        clonedObj[k] = deepClone(obj[k])
       }
     }
     return clonedObj
@@ -173,7 +174,7 @@ export const sortBy = <T>(
 }
 
 // 对象工具
-export const pick = <T, K extends keyof T>(obj: T, keys: K[]): Pick<T, K> => {
+export const pick = <T extends Record<string, any>, K extends keyof T>(obj: T, keys: K[]): Pick<T, K> => {
   const result = {} as Pick<T, K>
   keys.forEach(key => {
     if (key in obj) {
@@ -183,7 +184,7 @@ export const pick = <T, K extends keyof T>(obj: T, keys: K[]): Pick<T, K> => {
   return result
 }
 
-export const omit = <T, K extends keyof T>(obj: T, keys: K[]): Omit<T, K> => {
+export const omit = <T extends Record<string, any>, K extends keyof T>(obj: T, keys: K[]): Omit<T, K> => {
   const result = { ...obj }
   keys.forEach(key => {
     delete result[key]
@@ -204,7 +205,10 @@ export const isValidPhone = (phone: string): boolean => {
 
 // URL 工具
 export const getQueryParams = (url?: string): Record<string, string> => {
-  const searchParams = new URLSearchParams(url ? new URL(url).search : window.location.search)
+  const search = url
+    ? new URL(url).search
+    : (typeof window !== 'undefined' ? window.location.search : '')
+  const searchParams = new URLSearchParams(search)
   const params: Record<string, string> = {}
   
   for (const [key, value] of searchParams) {

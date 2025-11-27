@@ -285,7 +285,7 @@ export class MemoryCache implements ICache {
   
   // 重置统计信息
   private resetStats(): void {
-    this.stats = {
+    this.cacheStats = {
       hitCount: 0,
       missCount: 0,
       evictionCount: 0,

@@ -69,6 +69,8 @@ export interface LayoutItem {
   isDraggable?: boolean
   isResizable?: boolean
   isDragging?: boolean
+  // 记录卡片的模式锁定（用于持久化）
+  lockedMode?: CardMode
 }
 
 // 卡片实例接口
@@ -81,6 +83,7 @@ export interface CardInstance {
   props?: Record<string, any>
   state?: CardStateInfo
   locked?: boolean
+  lockedMode?: CardMode
   data?: any
   error?: string
   lastUpdated?: Date

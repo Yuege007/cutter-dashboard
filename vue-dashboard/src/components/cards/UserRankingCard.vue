@@ -5,6 +5,8 @@
     :mode="mode"
     :loading="loading"
     :error="error"
+    :mode-locked="props.modeLocked"
+    :forced-mode="props.forcedMode"
     @refresh="handleRefresh"
     @settings="handleSettings"
   >
@@ -123,7 +125,7 @@
                   <th>排名</th>
                   <th>领用人</th>
                   <th>工号</th>
-                  <th>领用数量</th>
+                  <th class="count-header">领用数量</th>
                   <th>最近领用</th>
                 </tr>
               </thead>
@@ -1074,8 +1076,12 @@ onUnmounted(() => {
 }
 
 .count-cell {
-  text-align: right;
+  text-align: center;
   min-width: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
 }
 
 .count-value {
@@ -1086,6 +1092,10 @@ onUnmounted(() => {
 .count-unit {
   color: #86868b;
   margin-left: 0.25rem;
+}
+
+.count-header {
+  text-align: center;
 }
 
 .time-cell {

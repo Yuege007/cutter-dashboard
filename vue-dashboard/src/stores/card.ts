@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { CardConfig, CardInstance, CardMode, CardState } from '@/types'
 import { useLayoutStore } from './layout'
+import { getCacheManager } from '@/services/cache'
 
 export const useCardStore = defineStore('card', () => {
   // 状态
@@ -57,8 +58,9 @@ export const useCardStore = defineStore('card', () => {
       config,
       position: { x: pos.x, y: pos.y },
       size: { w: config.defaultSize.w, h: config.defaultSize.h },
-      state: 'loading',
-      lastUpdated: new Date()
+      state: { status: 'loading' },
+      lastUpdated: new Date(),
+      lockedMode: undefined
     }
 
     // 添加到状态
@@ -69,9 +71,25 @@ export const useCardStore = defineStore('card', () => {
   }
 
   const removeCard = (instanceId: string) => {
+    const instance = activeCards.value.get(instanceId)
     activeCards.value.delete(instanceId)
     cardData.value.delete(instanceId)
     saveToLocalStorage()
+    // 清理该卡片相关缓存：按前缀和标识进行失效
+    try {
+      const cacheManager = getCacheManager()
+      if (instance) {
+        const cardId = instance.cardId
+        const pattern = new RegExp(`(card:${cardId}:)|(${instanceId})|(${cardId})`)
+        cacheManager.invalidate(pattern).catch(err => console.warn('缓存清理失败:', err))
+      } else {
+        // 无实例时按 instanceId 兜底
+        const fallback = new RegExp(`${instanceId}`)
+        cacheManager.invalidate(fallback).catch(err => console.warn('缓存清理失败:', err))
+      }
+    } catch (e) {
+      console.warn('缓存管理器不可用，跳过卡片数据清理')
+    }
   }
 
   const getCard = (instanceId: string): CardInstance | undefined => {
@@ -81,7 +99,7 @@ export const useCardStore = defineStore('card', () => {
   const updateCardState = (instanceId: string, state: CardState, error?: string) => {
     const card = activeCards.value.get(instanceId)
     if (card) {
-      card.state = state
+      card.state = { status: state }
       card.lastUpdated = new Date()
       if (error) {
         card.error = error
@@ -104,7 +122,8 @@ export const useCardStore = defineStore('card', () => {
     const card = getCard(instanceId)
     if (!card) return 'mini'
 
-    const { w, h } = card.layout
+    if (!card.size) return 'mini'
+    const { w, h } = card.size
     
     // 根据卡片尺寸判断显示模式
     if (w <= 2 && h <= 2) {
@@ -140,7 +159,8 @@ export const useCardStore = defineStore('card', () => {
         position: card.position,
         size: card.size,
         props: card.props,
-        state: card.state
+        state: card.state,
+        lockedMode: card.lockedMode
       })),
       timestamp: new Date().toISOString()
     }
@@ -161,8 +181,9 @@ export const useCardStore = defineStore('card', () => {
             position: cardData.position || { x: 0, y: 0 },
             size: cardData.size || config.defaultSize,
             props: cardData.props || {},
-            state: cardData.state || { loading: false, error: null, lastUpdated: new Date() },
-            locked: false
+            state: { status: 'loading' },
+            locked: false,
+            lockedMode: cardData.lockedMode
           }
           activeCards.value.set(card.id, card)
         }
@@ -188,11 +209,12 @@ export const useCardStore = defineStore('card', () => {
         position: card.position,
         size: card.size,
         props: card.props,
-        state: card.state
+        state: card.state,
+        lockedMode: card.lockedMode
       }))
       localStorage.setItem('dashboard-cards', JSON.stringify(cardsData))
     } catch (error) {
-      console.error('❌ 卡片数据保存失败:', error.message)
+      console.error('❌ 卡片数据保存失败:', (error as any)?.message || error)
     }
   }
 
@@ -213,8 +235,9 @@ export const useCardStore = defineStore('card', () => {
               config,
               position: item.position || { x: 0, y: 0 },
               size: item.size || config.defaultSize,
-              state: 'loading',
-              lastUpdated: new Date()
+              state: { status: 'loading' },
+              lastUpdated: new Date(),
+              lockedMode: item.lockedMode
             }
 
             activeCards.value.set(instanceId, cardInstance)

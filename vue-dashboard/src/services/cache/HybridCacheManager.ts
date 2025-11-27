@@ -12,6 +12,7 @@ import type {
   CacheStrategy,
   DataClassification
 } from './types'
+import { CacheLayer as CacheLayerEnum } from './types'
 import { MemoryCache } from './MemoryCache'
 import { LocalStorageCache } from './LocalStorageCache'
 import { IndexedDBCache } from './IndexedDBCache'
@@ -30,6 +31,7 @@ export class HybridCacheManager implements ICacheManager {
   
   private strategy: CacheStrategy
   private dataClassification: DataClassification
+  private enableHeavyIDB: boolean
   
   constructor(
     strategy: Partial<CacheStrategy> = {},
@@ -37,6 +39,8 @@ export class HybridCacheManager implements ICacheManager {
   ) {
     this.strategy = { ...DEFAULT_CACHE_STRATEGY, ...strategy }
     this.dataClassification = { ...DEFAULT_DATA_CLASSIFICATION, ...dataClassification }
+    // 是否启用重数据的 IndexedDB 持久化（默认关闭，设置 VITE_CACHE_HEAVY_USE_IDB=true 开启）
+    this.enableHeavyIDB = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_CACHE_HEAVY_USE_IDB === 'true')
     
     // 初始化各层缓存
     this.memoryCache = new MemoryCache({
@@ -73,7 +77,7 @@ export class HybridCacheManager implements ICacheManager {
       // 如果指定了特定层级，直接查询该层
       if (options.layer) {
         const result = await this.getFromLayer<T>(key, options.layer)
-        this.emitEvent('hit', options.layer, key, { duration: performance.now() - startTime })
+        this.emitEvent(result !== null ? 'hit' : 'miss', options.layer, key, { duration: performance.now() - startTime })
         return result
       }
       
@@ -81,7 +85,7 @@ export class HybridCacheManager implements ICacheManager {
       // 1. 首先检查内存缓存 (最快)
       let data = await this.memoryCache.get<T>(key)
       if (data !== null) {
-        this.emitEvent('hit', 'memory', key, { duration: performance.now() - startTime })
+        this.emitEvent('hit', CacheLayerEnum.MEMORY, key, { duration: performance.now() - startTime })
         return data
       }
       
@@ -90,45 +94,51 @@ export class HybridCacheManager implements ICacheManager {
       if (data !== null) {
         // 回填到内存缓存
         await this.memoryCache.set(key, data, { ttl: this.getDefaultTTL(key) })
-        this.emitEvent('hit', 'localStorage', key, { duration: performance.now() - startTime })
+        this.emitEvent('hit', CacheLayerEnum.LOCAL_STORAGE, key, { duration: performance.now() - startTime })
         return data
       }
       
       // 3. 检查IndexedDB (较慢但容量大)
       data = await this.indexedDBCache.get<T>(key)
       if (data !== null) {
-        // 回填到上层缓存
+        // 回填到上层缓存：重数据不回填 localStorage
         const ttl = this.getDefaultTTL(key)
-        await Promise.all([
-          this.memoryCache.set(key, data, { ttl }),
-          this.localStorageCache.set(key, data, { ttl })
-        ])
-        this.emitEvent('hit', 'indexedDB', key, { duration: performance.now() - startTime })
+        const promises: Promise<boolean>[] = []
+        promises.push(this.memoryCache.set(key, data, { ttl }))
+        if (this.shouldBackfillLocalStorage(key, data)) {
+          promises.push(this.localStorageCache.set(key, data, { ttl }))
+        }
+        await Promise.allSettled(promises)
+        this.emitEvent('hit', CacheLayerEnum.INDEXED_DB, key, { duration: performance.now() - startTime })
         return data
       }
       
       // 4. 检查HTTP缓存 (网络层)
       data = await this.httpCache.get<T>(key)
       if (data !== null) {
-        // 回填到其他缓存层
+        // 回填到其他缓存层：重数据不回填 localStorage；IndexedDB 受开关控制
         const ttl = this.getDefaultTTL(key)
-        await Promise.all([
-          this.memoryCache.set(key, data, { ttl }),
-          this.localStorageCache.set(key, data, { ttl }),
-          this.indexedDBCache.set(key, data, { ttl })
-        ])
-        this.emitEvent('hit', 'http', key, { duration: performance.now() - startTime })
+        const promises: Promise<boolean>[] = []
+        promises.push(this.memoryCache.set(key, data, { ttl }))
+        if (this.shouldBackfillLocalStorage(key, data)) {
+          promises.push(this.localStorageCache.set(key, data, { ttl }))
+        }
+        if (this.shouldStoreInIndexedDB(key, data, { ttl })) {
+          promises.push(this.indexedDBCache.set(key, data, { ttl }))
+        }
+        await Promise.allSettled(promises)
+        this.emitEvent('hit', CacheLayerEnum.HTTP, key, { duration: performance.now() - startTime })
         return data
       }
       
       // 所有缓存层都未命中
-      this.emitEvent('miss', 'memory', key, { duration: performance.now() - startTime })
+      this.emitEvent('miss', CacheLayerEnum.MEMORY, key, { duration: performance.now() - startTime })
       return null
     } catch (error) {
-      console.error('缓存获取失败:', error)
-      this.emitEvent('miss', 'memory', key, { 
+      console.error('缓存获取失败:', (error as any)?.message || error)
+      this.emitEvent('miss', CacheLayerEnum.MEMORY, key, { 
         duration: performance.now() - startTime, 
-        error: error.message 
+        error: (error as any)?.message || String(error) 
       })
       return null
     }
@@ -174,7 +184,7 @@ export class HybridCacheManager implements ICacheManager {
       const success = results.some(result => result.status === 'fulfilled' && result.value)
       
       if (success) {
-        this.emitEvent('set', 'memory', key, { 
+        this.emitEvent('set', CacheLayerEnum.MEMORY, key, { 
           duration: performance.now() - startTime,
           size: CacheUtils.calculateSize(data)
         })
@@ -182,7 +192,7 @@ export class HybridCacheManager implements ICacheManager {
       
       return success
     } catch (error) {
-      console.error('缓存设置失败:', error)
+      console.error('缓存设置失败:', (error as any)?.message || error)
       return false
     }
   }
@@ -209,12 +219,12 @@ export class HybridCacheManager implements ICacheManager {
       const success = results.some(result => result.status === 'fulfilled' && result.value)
       
       if (success) {
-        this.emitEvent('delete', 'memory', key)
+        this.emitEvent('delete', CacheLayerEnum.MEMORY, key)
       }
       
       return success
     } catch (error) {
-      console.error('缓存删除失败:', error)
+      console.error('缓存删除失败:', (error as any)?.message || error)
       return false
     }
   }
@@ -241,12 +251,12 @@ export class HybridCacheManager implements ICacheManager {
       const success = results.every(result => result.status === 'fulfilled' && result.value)
       
       if (success) {
-        this.emitEvent('cleanup', 'memory', 'all')
+        this.emitEvent('cleanup', CacheLayerEnum.MEMORY, 'all')
       }
       
       return success
     } catch (error) {
-      console.error('缓存清空失败:', error)
+      console.error('缓存清空失败:', (error as any)?.message || error)
       return false
     }
   }
@@ -270,11 +280,11 @@ export class HybridCacheManager implements ICacheManager {
         }
       }
       
-      this.emitEvent('evict', 'memory', `pattern:${pattern}`, { count: invalidatedCount })
+      this.emitEvent('evict', CacheLayerEnum.MEMORY, `pattern:${pattern}`, { count: invalidatedCount })
       
       return invalidatedCount
     } catch (error) {
-      console.error('缓存失效失败:', error)
+      console.error('缓存失效失败:', (error as any)?.message || error)
       return 0
     }
   }
@@ -388,7 +398,7 @@ export class HybridCacheManager implements ICacheManager {
   private classifyData(key: string): Partial<CacheOptions> {
     // 根据键模式分类数据
     for (const [category, config] of Object.entries(this.dataClassification)) {
-      if (config.patterns.some(pattern => key.includes(pattern))) {
+      if (config.patterns.some((pattern: string) => key.includes(pattern))) {
         return {
           ttl: config.ttl,
           persistent: 'persistent' in config ? config.persistent : undefined,
@@ -410,6 +420,10 @@ export class HybridCacheManager implements ICacheManager {
   }
   
   private shouldStoreInLocalStorage(key: string, data: any, options: CacheOptions): boolean {
+    // API响应或大数据集的键一律不存入 localStorage
+    if (this.isHeavyDataKey(key)) {
+      return false
+    }
     // 检查数据大小，超过500KB的数据不存储到localStorage
     const dataSize = CacheUtils.calculateSize(data)
     if (dataSize > 512 * 1024) { // 512KB
@@ -422,6 +436,9 @@ export class HybridCacheManager implements ICacheManager {
   
   private shouldStoreInIndexedDB(key: string, data: any, options: CacheOptions): boolean {
     const size = CacheUtils.calculateSize(data)
+    if (!this.enableHeavyIDB) {
+      return false
+    }
     return this.dataClassification.largeDataset.patterns.some(pattern => key.includes(pattern)) ||
            size > this.dataClassification.largeDataset.sizeThreshold
   }
@@ -447,5 +464,25 @@ export class HybridCacheManager implements ICacheManager {
         console.error('缓存事件处理失败:', error)
       }
     })
+  }
+
+  // 判断是否为重数据键（API响应或大数据集）
+  private isHeavyDataKey(key: string): boolean {
+    const api = this.dataClassification.apiResponse.patterns.some(pattern => key.includes(pattern))
+    const large = this.dataClassification.largeDataset.patterns.some(pattern => key.includes(pattern))
+    return api || large
+  }
+
+  // 回填 localStorage 的判定：仅轻数据才回填
+  private shouldBackfillLocalStorage(key: string, data: any): boolean {
+    if (this.isHeavyDataKey(key)) {
+      return false
+    }
+    const size = CacheUtils.calculateSize(data)
+    // 限制 1MB 上限，且符合 userConfig 模式才回填
+    if (size >= 1024 * 1024) {
+      return false
+    }
+    return this.dataClassification.userConfig.patterns.some(pattern => key.includes(pattern))
   }
 }

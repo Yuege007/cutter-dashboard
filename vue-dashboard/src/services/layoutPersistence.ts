@@ -1,4 +1,4 @@
-import { getCacheManager } from '@/services/cache'
+import { getCacheManager, CacheUtils } from '@/services/cache'
 import type { LayoutItem } from '@/types'
 
 /**
@@ -19,7 +19,7 @@ export interface UserLayoutConfig {
 export class LayoutPersistenceService {
   private cacheManager = getCacheManager()
   private readonly CACHE_TTL = 30 * 24 * 60 * 60 * 1000 // 30天
-  private readonly VERSION = '1.0'
+  private readonly VERSION = '1.1'
 
   /**
    * 生成用户布局缓存键
@@ -48,17 +48,24 @@ export class LayoutPersistenceService {
           maxH: item.maxH,
           static: item.static,
           isDraggable: item.isDraggable,
-          isResizable: item.isResizable
+          isResizable: item.isResizable,
+          lockedMode: item.lockedMode
         })),
         lastSaved: new Date().toISOString(),
         version: this.VERSION
       }
 
       const cacheKey = this.getUserLayoutKey(userId)
-      await this.cacheManager.set(cacheKey, layoutConfig, {
+      const success = await this.cacheManager.set(cacheKey, layoutConfig, {
         ttl: this.CACHE_TTL,
         persistent: true // 保存到localStorage
       })
+
+      if (!success) {
+        const usage = await this.getUsageStats().catch(() => null)
+        const detail = usage ? `，已用 ${CacheUtils.formatBytes(usage.used)} / 5MB` : ''
+        throw new Error(`保存失败：存储空间不足或写入受限${detail}`)
+      }
 
       if (!silent) {
         console.log(`💾 布局已保存 - ${userName}(${layouts.length}个卡片)`)
@@ -143,19 +150,19 @@ export class LayoutPersistenceService {
    */
   async getLayoutStats(): Promise<Record<string, any>> {
     try {
-      const stats = await this.cacheManager.getAllStats()
+      const stats: any = await this.cacheManager.getAllStats()
       const layoutKeys = Object.keys(stats.localStorage?.items || {})
         .filter(key => key.includes('user_layout_'))
       
       const layoutStats: Record<string, any> = {}
       for (const key of layoutKeys) {
         const userId = key.split('_').pop()
-        const config = await this.cacheManager.get(key.replace('dashboard_cache_', ''))
+        const config = await this.cacheManager.get<UserLayoutConfig | null>(key.replace('dashboard_cache_', ''))
         if (config) {
           layoutStats[userId || 'unknown'] = {
-            userName: config.userName,
-            layoutCount: config.layouts?.length || 0,
-            lastSaved: config.lastSaved
+            userName: (config as UserLayoutConfig).userName,
+            layoutCount: (config as UserLayoutConfig).layouts?.length || 0,
+            lastSaved: (config as UserLayoutConfig).lastSaved
           }
         }
       }
@@ -164,6 +171,21 @@ export class LayoutPersistenceService {
     } catch (error) {
       console.error('❌ 获取布局统计失败:', error)
       return {}
+    }
+  }
+
+  /**
+   * 获取localStorage使用情况（估算值）
+   */
+  async getUsageStats(): Promise<{ used: number; available: number; percentage: number }> {
+    try {
+      const usage = await (await import('@/services/cache')).CacheUtils.getStorageUsage()
+      const used = usage.localStorage.used
+      const available = usage.localStorage.available
+      const percentage = used + available > 0 ? (used / (used + available)) * 100 : 0
+      return { used, available, percentage }
+    } catch {
+      return { used: 0, available: 0, percentage: 0 }
     }
   }
 }
@@ -179,6 +201,10 @@ if (typeof window !== 'undefined') {
     // 快捷调试方法
     async stats() {
       return await layoutPersistence.getLayoutStats()
+    },
+
+    async usage() {
+      return await layoutPersistence.getUsageStats()
     },
 
     async save(userId: number, userName: string, layouts: any[]) {

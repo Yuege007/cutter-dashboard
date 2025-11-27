@@ -5,6 +5,8 @@
     :mode="mode"
     :loading="loading"
     :error="error"
+    :mode-locked="props.modeLocked"
+    :forced-mode="props.forcedMode"
     @refresh="handleRefresh"
     @settings="handleSettings"
   >

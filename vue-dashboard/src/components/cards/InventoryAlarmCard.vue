@@ -3,8 +3,11 @@
     :card-id="cardId"
     :title="cardTitle"
     :mode="mode"
+    :mode-locked="props.modeLocked"
+    :forced-mode="props.forcedMode"
     :loading="loading"
     :error="error"
+    v-bind="$attrs"
     @refresh="handleRefresh"
     @settings="handleSettings"
   >
@@ -32,13 +35,17 @@
           >
             <div class="material-info">
               <span class="material-name">{{ material.productName }}</span>
-              <span class="material-ratio">({{ material.inventory }}/{{ material.inventoryWarn }})</span>
+              <span class="material-ratio">
+                (<span class="ratio-current" :style="{ color: getColor(material.progressPercent) }">{{ material.inventory }}</span>
+                <span class="ratio-sep"> / </span>
+                <span class="ratio-warn">{{ material.inventoryWarn }}</span>)
+                <span v-if="material.inventory === 0" class="zero-tag">断供</span>
+              </span>
             </div>
             <div class="progress-bar">
               <div 
                 class="progress-fill"
-                :class="getProgressClass(material.progressPercent)"
-                :style="{ width: `${Math.max(material.progressPercent, 5)}%` }"
+                :style="{ width: `${Math.max(material.progressPercent, 5)}%`, background: getGradient(material.progressPercent) }"
               ></div>
             </div>
           </div>
@@ -56,7 +63,7 @@
     <template v-else>
       <div class="full-view">
         <div class="full-header">
-          <h3 class="full-title">预警物料清单</h3>
+          <h3 class="full-title"><span class="count-highlight">{{ filteredAlarmMaterials.length }}</span> 种物料库存不足</h3>
           <div class="header-actions">
             <select v-model="selectedFilter" class="filter-select" @change="applyFilter">
               <option value="all">全部类别</option>
@@ -184,9 +191,26 @@ const filteredAlarmMaterials = computed(() => {
 
 // 方法
 const getProgressClass = (percent: number) => {
-  if (percent <= 30) return 'danger'
-  if (percent <= 60) return 'warning'
-  return 'normal'
+  // 已不使用类名映射，改为通过CSS变量生成渐变色
+  return ''
+}
+
+const getLevelKey = (percent: number) => {
+  if (percent === 0) return 'zero'
+  if (percent < 20) return 'severe'
+  if (percent < 50) return 'short'
+  if (percent < 80) return 'warn'
+  return 'good'
+}
+
+const getGradient = (percent: number) => {
+  const key = getLevelKey(percent)
+  return `linear-gradient(90deg, var(--inv-${key}) 0%, var(--inv-${key}-light) 80%)`
+}
+
+const getColor = (percent: number) => {
+  const key = getLevelKey(percent)
+  return `var(--inv-${key})`
 }
 
 const handleRefresh = async () => {
@@ -289,26 +313,27 @@ watch(
   color: var(--color-text-secondary);
 }
 
+.ratio-warn {
+  color: var(--inv-muted);
+}
+
+.zero-tag {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 10px;
+  font-size: 10px;
+  line-height: 16px;
+  color: var(--inv-zero);
+  background-color: var(--inv-zero-light);
+}
+
 .progress-bar {
   @apply w-full h-2 rounded-full overflow-hidden;
-  background-color: var(--color-text-secondary);
-  opacity: 0.2;
+  background-color: var(--inv-track);
 }
 
 .progress-fill {
   @apply h-full transition-all duration-300 rounded-full;
-}
-
-.progress-fill.danger {
-  @apply bg-red-600;
-}
-
-.progress-fill.warning {
-  @apply bg-red-500;
-}
-
-.progress-fill.normal {
-  @apply bg-red-400;
 }
 
 /* Full 视图样式 */
@@ -324,6 +349,13 @@ watch(
 .full-title {
   @apply text-xl font-medium;
   color: var(--color-text);
+}
+
+.full-title .count-highlight {
+  font-weight: 700;
+  color: var(--inv-severe);
+  font-size: 1.4em; /* 相对标题放大 */
+  letter-spacing: -0.02em;
 }
 
 .header-actions {
