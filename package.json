@@ -1,0 +1,12 @@
+{
+  "name": "cutter-dashboard",
+  "private": true,
+  "workspaces": [
+    "vue-dashboard"
+  ],
+  "scripts": {
+    "build": "npm --workspace vue-dashboard run build",
+    "dev": "npm --workspace vue-dashboard run dev",
+    "preview": "npm --workspace vue-dashboard run preview"
+  }
+}
