@@ -240,7 +240,7 @@ export interface ToolbarProps {
 }
 
 const props = withDefaults(defineProps<ToolbarProps>(), {
-  title: '数字看板系统',
+  title: '刀具柜数字看板',
   showSearch: true,
   sidebarVisible: true,
   autoHideLocked: false
@@ -299,7 +299,7 @@ const startEditTitle = () => {
 }
 
 const confirmTitle = () => {
-  const newTitle = (titleInput.value || '').trim() || '数字看板系统'
+  const newTitle = (titleInput.value || '').trim() || '刀具柜数字看板'
   isEditingTitle.value = false
   emit('update:title', newTitle)
 }

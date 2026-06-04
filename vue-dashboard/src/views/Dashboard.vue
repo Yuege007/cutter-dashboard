@@ -62,7 +62,10 @@
           :style="getPlaceholderStyle()"
         >
           <div class="placeholder-content">
-            <div class="placeholder-icon">{{ dragCard?.icon }}</div>
+            <div class="placeholder-icon">
+              <component :is="dragCard.icon" v-if="dragCard && typeof dragCard.icon === 'object'" />
+              <span v-else>{{ dragCard?.icon }}</span>
+            </div>
             <div class="placeholder-text">{{ dragCard?.name }}</div>
           </div>
         </div>
@@ -152,6 +155,7 @@ import { useCardStore } from '@/stores/card'
 import { useThemeStore } from '@/stores/theme'
 import { useAuthStore } from '@/stores/auth'
 import { layoutPersistence } from '@/services/layoutPersistence'
+import { startDefaultPollingTasks } from '@/services/polling'
 import Toolbar from '@/components/layout/Toolbar.vue'
 import Sidebar from '@/components/layout/Sidebar.vue'
 import GridLayout from '@/components/layout/GridLayout.vue'
@@ -165,7 +169,7 @@ const themeStore = useThemeStore()
 const authStore = useAuthStore()
 
 // 响应式数据
-const defaultDashboardTitle = import.meta.env.VITE_APP_TITLE || '数字看板系统'
+const defaultDashboardTitle = import.meta.env.VITE_APP_TITLE || '刀具柜数字看板'
 const dashboardTitle = ref(defaultDashboardTitle)
 const sidebarVisible = ref(false) // 默认隐藏侧边栏
 const sidebarCollapsed = ref(false)
@@ -212,6 +216,27 @@ const gridLayoutRef = ref<InstanceType<typeof GridLayout>>()
 const activeCardsCount = computed(() => cardStore.cardCount)
 
 // 事件处理
+const applyDefaultCutterLayout = () => {
+  if (cardStore.cardCount > 0) return
+
+  const defaults = [
+    { cardId: 'material-overview-card', position: { x: 0, y: 0 }, size: { w: 5, h: 3 } },
+    { cardId: 'inventory-alarm-card', position: { x: 5, y: 0 }, size: { w: 4, h: 3 } },
+    { cardId: 'cabinet-status-card', position: { x: 9, y: 0 }, size: { w: 5, h: 4 } },
+    { cardId: 'in-out-trend-card', position: { x: 0, y: 3 }, size: { w: 5, h: 3 } },
+    { cardId: 'user-ranking-card', position: { x: 5, y: 3 }, size: { w: 4, h: 3 } },
+    { cardId: 'material-return-card', position: { x: 9, y: 4 }, size: { w: 5, h: 3 } },
+    { cardId: 'stock-change-card', position: { x: 0, y: 6 }, size: { w: 5, h: 3 } },
+    { cardId: 'violation-record-card', position: { x: 5, y: 6 }, size: { w: 5, h: 3 } }
+  ]
+
+  defaults.forEach(item => {
+    const instanceId = cardStore.addCard(item.cardId, item.position)
+    if (instanceId) {
+      cardStore.updateCardSize(instanceId, item.size)
+    }
+  })
+}
 
 const toggleSidebar = () => {
   sidebarVisible.value = !sidebarVisible.value
@@ -440,7 +465,6 @@ const handleItemAdded = (item: LayoutItem) => {
 }
 
 const handleItemRemoved = async (itemId: string) => {
-  console.log('Item removed:', itemId)
   showNotification('info', '卡片已删除')
 
   // 🔧 卡片删除后自动保存布局
@@ -696,6 +720,8 @@ onMounted(async () => {
     return
   }
 
+  startDefaultPollingTasks()
+
   // 初始化主题
   themeStore.loadFromLocalStorage()
 
@@ -746,10 +772,15 @@ onMounted(async () => {
         if (restoredCount > 0) {
           console.log(`📂 已恢复 ${restoredCount} 个卡片`)
         }
+      } else {
+        applyDefaultCutterLayout()
       }
     } catch (error) {
       console.error('❌ 恢复用户布局失败:', error)
+      applyDefaultCutterLayout()
     }
+  } else {
+    applyDefaultCutterLayout()
   }
 })
 
@@ -824,9 +855,14 @@ watch(
           if (restoredCount > 0) {
             console.log(`🔄 用户切换 - 已恢复 ${restoredCount} 个卡片`)
           }
+        } else {
+          cardStore.clearAllCards()
+          applyDefaultCutterLayout()
         }
       } catch (error) {
         console.error('❌ 自动恢复用户布局失败:', error)
+        cardStore.clearAllCards()
+        applyDefaultCutterLayout()
       }
     }
   },
@@ -988,8 +1024,13 @@ watch(
 }
 
 .placeholder-icon {
-  @apply text-2xl mb-2 opacity-70;
+  @apply mb-2 opacity-70;
   color: var(--color-primary);
+}
+
+.placeholder-icon svg {
+  width: 28px;
+  height: 28px;
 }
 
 .placeholder-text {

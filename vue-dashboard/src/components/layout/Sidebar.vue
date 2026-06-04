@@ -48,7 +48,10 @@
 
             >
               <div class="card-item-content">
-                <div class="card-icon">{{ card.icon }}</div>
+                <div class="card-icon">
+                  <component :is="card.icon" v-if="typeof card.icon === 'object'" />
+                  <span v-else>{{ card.icon }}</span>
+                </div>
                 <div class="card-info">
                   <h4 class="card-name">{{ card.name }}</h4>
                   <p class="card-description">{{ card.description }}</p>
@@ -156,7 +159,11 @@ const getCategoryLabel = (category: string) => {
     'chart': '图表',
     'text': '文本',
     'media': '媒体',
-    'layout': '布局'
+    'layout': '布局',
+    'inventory': '库存',
+    'device': '设备',
+    'analytics': '分析',
+    'tracking': '追踪'
   }
   return categoryMap[category] || category
 }
@@ -165,10 +172,15 @@ const onDragStart = (event: DragEvent, card: CardConfig) => {
   if (event.dataTransfer) {
     event.dataTransfer.setData('application/json', JSON.stringify({
       type: 'card',
-      cardId: card.id,
-      cardConfig: card
+      cardId: card.id
     }))
+    event.dataTransfer.setData('text/plain', card.name)
     event.dataTransfer.effectAllowed = 'copy'
+
+    const target = event.currentTarget as HTMLElement | null
+    if (target) {
+      event.dataTransfer.setDragImage(target, 24, 24)
+    }
   }
   emit('dragStart', card)
 }
@@ -373,7 +385,19 @@ onUnmounted(() => {
 }
 
 .card-icon {
-  @apply text-2xl flex-shrink-0;
+  @apply flex flex-shrink-0 items-center justify-center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  color: var(--color-primary);
+  background:
+    linear-gradient(145deg, rgba(59, 130, 246, 0.18), rgba(16, 185, 129, 0.08));
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.card-icon svg {
+  width: 18px;
+  height: 18px;
 }
 
 .card-info {

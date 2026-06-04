@@ -23,6 +23,30 @@
           </button>
         </div>
 
+        <!-- 自动业务消息 -->
+        <div class="auto-message-section">
+          <div class="preset-groups">
+            <div
+              v-for="(presets, group) in presetsByGroup"
+              :key="group"
+              class="preset-group"
+            >
+              <span class="preset-group-title">{{ group }}</span>
+              <label
+                v-for="preset in presets"
+                :key="preset.key"
+                class="preset-option"
+              >
+                <input
+                  v-model="autoMessageSettings[preset.key]"
+                  type="checkbox"
+                />
+                <span>{{ preset.label }}</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
         <!-- 添加消息区域 -->
         <div class="add-message-section">
           <div class="input-group">
@@ -50,7 +74,7 @@
         <!-- 消息列表 -->
         <div class="message-list">
           <div class="list-header">
-            <span class="list-title">消息列表 ({{ messages.length }})</span>
+            <span class="list-title">手动消息 ({{ messages.length }})</span>
             <button
               v-if="messages.length > 0"
               @click="clearAllMessages"
@@ -61,6 +85,20 @@
           </div>
 
           <div class="list-content">
+            <div
+              v-if="autoMessages.length > 0"
+              class="auto-preview"
+            >
+              <div class="auto-preview-title">当前自动消息</div>
+              <div
+                v-for="message in autoMessages"
+                :key="message.id"
+                class="auto-preview-item"
+              >
+                {{ message.content }}
+              </div>
+            </div>
+
             <div
               v-for="message in messages"
               :key="message.id"
@@ -162,14 +200,10 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
-
-// 消息接口定义
-interface Message {
-  id: string
-  content: string
-  createdAt: Date
-  type?: 'system' | 'business' | 'user' | 'welcome'
-}
+import {
+  useBottomBannerMessages,
+  type BannerMessage
+} from '@/composables/useBottomBannerMessages'
 
 // 响应式数据
 const isPaused = ref(false)
@@ -181,47 +215,28 @@ const scrollPosition = ref(0)
 const animationId = ref<number>()
 
 // 消息数据
-const messages = ref<Message[]>([
+const messages = ref<BannerMessage[]>([
   {
     id: '1',
-    content: '🎉 欢迎使用Vue数字看板系统！这是一个现代化的数据展示平台。',
+    content: '欢迎使用刀具柜数字看板，底部消息可手动维护，也可开启自动业务消息。',
     createdAt: new Date(),
     type: 'welcome'
   },
   {
-    id: '2', 
-    content: '📊 系统运行正常，所有服务状态良好。当前在线用户：156人。',
-    createdAt: new Date(),
-    type: 'system'
-  },
-  {
-    id: '3',
-    content: '⚠️ 库存预警：螺丝刀库存不足，当前库存：2个，建议及时补充。',
+    id: '2',
+    content: '刀具库存、货道预警、领刀归还和异常记录可自动汇总为轮播消息。',
     createdAt: new Date(),
     type: 'business'
-  },
-  {
-    id: '4',
-    content: '📈 今日出入库统计：入库128件，出库56件，净增加72件物料。',
-    createdAt: new Date(),
-    type: 'business'
-  },
-  {
-    id: '5',
-    content: '🔧 系统将于今晚23:00-01:00进行维护升级，期间可能影响部分功能使用。',
-    createdAt: new Date(),
-    type: 'system'
   }
 ])
 
-// 计算属性
-const displayMessages = computed(() => {
-  if (messages.value.length === 0) {
-    return [{ id: 'empty', content: '暂无消息显示', createdAt: new Date() }]
-  }
-  // 为了无缝循环，复制消息数组
-  return [...messages.value, ...messages.value]
-})
+const {
+  settings: autoMessageSettings,
+  presetsByGroup,
+  autoMessages,
+  sourceMessages,
+  displayMessages
+} = useBottomBannerMessages(messages)
 
 const scrollStyle = computed(() => {
   return {
@@ -260,7 +275,7 @@ const addMessage = () => {
   const content = newMessage.value.trim()
   if (!content) return
 
-  const message: Message = {
+  const message: BannerMessage = {
     id: Date.now().toString(),
     content,
     createdAt: new Date(),
@@ -347,9 +362,11 @@ const loadFromLocalStorage = () => {
       const data = JSON.parse(saved)
       if (data.messages && Array.isArray(data.messages)) {
         messages.value = data.messages.map(msg => ({
-          ...msg,
+          id: String(msg.id),
+          content: String(msg.content || ''),
+          type: msg.type === 'business' || msg.type === 'welcome' ? msg.type : 'user',
           createdAt: new Date(msg.createdAt)
-        }))
+        })).filter(msg => msg.content)
       }
       if (typeof data.isPaused === 'boolean') {
         isPaused.value = data.isPaused
@@ -378,6 +395,14 @@ onUnmounted(() => {
 // 监听消息变化，保存到本地存储
 watch(messages, saveToLocalStorage, { deep: true })
 watch(isPaused, saveToLocalStorage)
+watch(sourceMessages, () => {
+  scrollPosition.value = 0
+  nextTick(() => {
+    if (!isPaused.value) {
+      startScrolling()
+    }
+  })
+})
 </script>
 
 <style scoped>
@@ -476,8 +501,8 @@ watch(isPaused, saveToLocalStorage)
   @apply rounded-t-xl flex flex-col;
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(20px);
-  max-height: 60vh;
-  min-height: 400px;
+  max-height: min(82vh, calc(100vh - 56px));
+  min-height: min(520px, calc(100vh - 56px));
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-bottom: none;
   overflow: hidden;
@@ -498,6 +523,38 @@ watch(isPaused, saveToLocalStorage)
 
 .close-btn {
   @apply p-2 rounded-lg transition-colors text-gray-500 hover:text-gray-700 hover:bg-gray-100;
+}
+
+/* 自动消息区域 */
+.auto-message-section {
+  @apply p-4 border-b border-gray-200 flex-shrink-0;
+  max-height: 230px;
+  overflow-y: auto;
+}
+
+.preset-groups {
+  @apply grid gap-3;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.preset-group {
+  @apply min-w-0 rounded-lg border border-gray-200 bg-gray-50 p-3;
+}
+
+.preset-group-title {
+  @apply block text-xs font-semibold text-gray-700 mb-2;
+}
+
+.preset-option {
+  @apply flex items-center gap-2 text-xs text-gray-600 py-1 cursor-pointer;
+}
+
+.preset-option input {
+  @apply w-3.5 h-3.5 accent-blue-600 flex-shrink-0;
+}
+
+.preset-option span {
+  @apply truncate;
 }
 
 /* 添加消息区域 */
@@ -533,6 +590,7 @@ watch(isPaused, saveToLocalStorage)
 /* 消息列表 */
 .message-list {
   @apply flex flex-col flex-1 min-h-0;
+  min-height: 170px;
 }
 
 .list-header {
@@ -550,6 +608,22 @@ watch(isPaused, saveToLocalStorage)
 .list-content {
   @apply flex-1 overflow-y-auto custom-scrollbar p-4 space-y-3;
   min-height: 0;
+}
+
+.auto-preview {
+  @apply rounded-lg border border-blue-100 bg-blue-50 p-3 space-y-2;
+}
+
+.auto-preview-title {
+  @apply text-xs font-semibold text-blue-800;
+}
+
+.auto-preview-item {
+  @apply text-xs text-blue-700 leading-relaxed;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 /* 消息列表项 */
@@ -629,8 +703,8 @@ watch(isPaused, saveToLocalStorage)
   }
 
   .panel-content {
-    max-height: 70vh;
-    min-height: 350px;
+    max-height: min(82vh, calc(100vh - 56px));
+    min-height: min(460px, calc(100vh - 56px));
   }
 
   .message-input {
@@ -668,6 +742,15 @@ watch(isPaused, saveToLocalStorage)
     @apply p-3;
   }
 
+  .auto-message-section {
+    @apply p-3;
+    max-height: 190px;
+  }
+
+  .preset-groups {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .list-header {
     @apply p-3;
   }
@@ -697,6 +780,46 @@ watch(isPaused, saveToLocalStorage)
   background: rgba(255, 255, 255, 0.1);
   border-color: rgba(255, 255, 255, 0.2);
   color: var(--color-text);
+}
+
+.theme-dark .auto-message-section,
+.theme-tech .auto-message-section,
+.theme-dark .add-message-section,
+.theme-tech .add-message-section,
+.theme-dark .list-header,
+.theme-tech .list-header,
+.theme-dark .panel-header,
+.theme-tech .panel-header {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.theme-dark .preset-group-title,
+.theme-tech .preset-group-title {
+  color: var(--color-text);
+}
+
+.theme-dark .preset-option,
+.theme-tech .preset-option {
+  color: var(--color-text-secondary);
+}
+
+.theme-dark .preset-group,
+.theme-tech .preset-group {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.theme-dark .auto-preview,
+.theme-tech .auto-preview {
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(96, 165, 250, 0.22);
+}
+
+.theme-dark .auto-preview-title,
+.theme-tech .auto-preview-title,
+.theme-dark .auto-preview-item,
+.theme-tech .auto-preview-item {
+  color: #bfdbfe;
 }
 
 .theme-dark .message-list-item,

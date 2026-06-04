@@ -1,0 +1,552 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>智能柜货道预警看板预览</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0f172a;
+      --card: #172033;
+      --panel: #1f2937;
+      --panel-soft: rgba(30, 41, 59, 0.72);
+      --line: rgba(148, 163, 184, 0.22);
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --blue: #38bdf8;
+      --green: #22c55e;
+      --orange: #f59e0b;
+      --red: #ef4444;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(circle at 18% 14%, rgba(56, 189, 248, 0.12), transparent 26%),
+        linear-gradient(180deg, #111827 0%, #0f172a 100%);
+      color: var(--text);
+      font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif;
+    }
+
+    .stage {
+      width: min(1120px, calc(100vw - 40px));
+      padding: 24px;
+    }
+
+    .card {
+      height: 680px;
+      display: grid;
+      grid-template-rows: auto auto 1fr auto;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: linear-gradient(180deg, rgba(31, 41, 55, 0.98), rgba(15, 23, 42, 0.98));
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.38);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 18px 20px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .title {
+      margin: 0;
+      font-size: 21px;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .tabs {
+      display: inline-grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px;
+      padding: 4px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(15, 23, 42, 0.72);
+    }
+
+    .tab {
+      min-width: 108px;
+      padding: 8px 12px;
+      border-radius: 6px;
+      color: var(--muted);
+      font-size: 14px;
+      text-align: center;
+    }
+
+    .tab.active {
+      color: #e0f2fe;
+      background: rgba(56, 189, 248, 0.16);
+      box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.34);
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: 1.1fr 1.1fr 1fr 1.4fr;
+      gap: 12px;
+      padding: 16px 20px;
+    }
+
+    .metric {
+      min-width: 0;
+      padding: 14px 16px;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      border-radius: 8px;
+      background: rgba(15, 23, 42, 0.44);
+    }
+
+    .metric-label {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .metric-value {
+      margin-top: 7px;
+      font-size: clamp(26px, 4vw, 38px);
+      font-weight: 800;
+      line-height: 1;
+      letter-spacing: 0;
+    }
+
+    .metric-value.red {
+      color: var(--red);
+    }
+
+    .metric-value.orange {
+      color: var(--orange);
+    }
+
+    .metric-value.blue {
+      color: var(--blue);
+    }
+
+    .metric-name {
+      margin-top: 8px;
+      font-size: 20px;
+      font-weight: 750;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .main {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1.65fr) minmax(260px, 0.85fr);
+      gap: 16px;
+      padding: 0 20px 16px;
+    }
+
+    .section {
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      border-radius: 8px;
+      background: rgba(15, 23, 42, 0.32);
+      overflow: hidden;
+    }
+
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+      background: rgba(30, 41, 59, 0.56);
+    }
+
+    .section-title {
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    .page-mark {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .priority-list {
+      min-height: 0;
+      display: grid;
+      grid-template-rows: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      padding: 12px;
+    }
+
+    .priority-card {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 78px minmax(0, 1fr) 118px 72px;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      border-radius: 8px;
+      background: var(--panel-soft);
+    }
+
+    .channel {
+      display: grid;
+      place-items: center;
+      height: 48px;
+      border-radius: 8px;
+      color: #e0f2fe;
+      background: rgba(56, 189, 248, 0.14);
+      border: 1px solid rgba(56, 189, 248, 0.34);
+      font-size: 20px;
+      font-weight: 800;
+      font-family: Consolas, monospace;
+    }
+
+    .material {
+      min-width: 0;
+    }
+
+    .material-main {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .material-name {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 17px;
+      font-weight: 750;
+    }
+
+    .spec {
+      flex: none;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .cabinet {
+      margin-top: 7px;
+      color: var(--muted);
+      font-size: 13px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .stock {
+      text-align: right;
+      font-family: Consolas, monospace;
+    }
+
+    .stock-label {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .stock-value {
+      margin-top: 5px;
+      font-size: 20px;
+      font-weight: 800;
+    }
+
+    .tag {
+      justify-self: end;
+      min-width: 62px;
+      padding: 7px 0;
+      border-radius: 999px;
+      text-align: center;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .tag.red {
+      color: #fee2e2;
+      background: rgba(239, 68, 68, 0.16);
+      border: 1px solid rgba(239, 68, 68, 0.42);
+    }
+
+    .tag.orange {
+      color: #ffedd5;
+      background: rgba(245, 158, 11, 0.16);
+      border: 1px solid rgba(245, 158, 11, 0.42);
+    }
+
+    .distribution {
+      padding: 12px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .dist-row {
+      display: grid;
+      grid-template-columns: minmax(0, 90px) 1fr 32px;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .dist-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 13px;
+      color: #dbeafe;
+    }
+
+    .dist-track {
+      height: 12px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: rgba(51, 65, 85, 0.92);
+    }
+
+    .dist-fill {
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--orange), var(--red));
+    }
+
+    .dist-count {
+      text-align: right;
+      color: var(--text);
+      font-weight: 750;
+      font-family: Consolas, monospace;
+    }
+
+    .side-note {
+      margin: 2px 12px 12px;
+      padding: 11px;
+      border-radius: 8px;
+      background: rgba(245, 158, 11, 0.1);
+      color: #fed7aa;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 11px 20px 15px;
+      border-top: 1px solid rgba(148, 163, 184, 0.14);
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .dots {
+      display: flex;
+      gap: 7px;
+    }
+
+    .dot {
+      width: 24px;
+      height: 4px;
+      border-radius: 999px;
+      background: rgba(148, 163, 184, 0.35);
+    }
+
+    .dot.active {
+      background: var(--blue);
+    }
+
+    @media (max-width: 860px) {
+      .card {
+        height: 720px;
+      }
+
+      .card-header {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .metrics {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .main {
+        grid-template-columns: 1fr;
+      }
+
+      .distribution {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .priority-list {
+        grid-template-rows: repeat(3, minmax(0, 1fr));
+      }
+
+      .priority-card:nth-child(4) {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="stage">
+    <section class="card">
+      <header class="card-header">
+        <div>
+          <h1 class="title">智能柜状态监控</h1>
+          <div class="subtitle">Full 模式：预警货道看板页，不依赖滚动操作</div>
+        </div>
+        <div class="tabs">
+          <div class="tab">柜体总览</div>
+          <div class="tab active">预警货道</div>
+        </div>
+      </header>
+
+      <section class="metrics">
+        <div class="metric">
+          <div class="metric-label">预警货道</div>
+          <div class="metric-value orange">8</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">断供货道</div>
+          <div class="metric-value red">2</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">涉及柜体</div>
+          <div class="metric-value blue">3</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">最严重柜体</div>
+          <div class="metric-name">一号工具柜</div>
+        </div>
+      </section>
+
+      <section class="main">
+        <article class="section">
+          <div class="section-head">
+            <div class="section-title">优先处理</div>
+            <div class="page-mark">自动轮播 1 / 2</div>
+          </div>
+
+          <div class="priority-list">
+            <div class="priority-card">
+              <div class="channel">A-03</div>
+              <div class="material">
+                <div class="material-main">
+                  <div class="material-name">硬质合金立铣刀</div>
+                  <div class="spec">Φ6</div>
+                </div>
+                <div class="cabinet">一号工具柜 · DF20240510001</div>
+              </div>
+              <div class="stock">
+                <div class="stock-label">当前 / 容量</div>
+                <div class="stock-value">0 / 10</div>
+              </div>
+              <div class="tag red">断供</div>
+            </div>
+
+            <div class="priority-card">
+              <div class="channel">C-01</div>
+              <div class="material">
+                <div class="material-main">
+                  <div class="material-name">钨钢球头铣刀</div>
+                  <div class="spec">R3</div>
+                </div>
+                <div class="cabinet">二号工具柜 · DF20240510002</div>
+              </div>
+              <div class="stock">
+                <div class="stock-label">当前 / 容量</div>
+                <div class="stock-value">0 / 8</div>
+              </div>
+              <div class="tag red">断供</div>
+            </div>
+
+            <div class="priority-card">
+              <div class="channel">A-08</div>
+              <div class="material">
+                <div class="material-main">
+                  <div class="material-name">含钴麻花钻</div>
+                  <div class="spec">Φ4.2</div>
+                </div>
+                <div class="cabinet">一号工具柜 · DF20240510001</div>
+              </div>
+              <div class="stock">
+                <div class="stock-label">当前 / 容量</div>
+                <div class="stock-value">1 / 12</div>
+              </div>
+              <div class="tag orange">紧缺</div>
+            </div>
+
+            <div class="priority-card">
+              <div class="channel">B-02</div>
+              <div class="material">
+                <div class="material-main">
+                  <div class="material-name">数控刀片 CNMG120408</div>
+                  <div class="spec">硬质合金</div>
+                </div>
+                <div class="cabinet">一号工具柜 · DF20240510001</div>
+              </div>
+              <div class="stock">
+                <div class="stock-label">当前 / 容量</div>
+                <div class="stock-value">2 / 20</div>
+              </div>
+              <div class="tag orange">紧缺</div>
+            </div>
+          </div>
+        </article>
+
+        <aside class="section">
+          <div class="section-head">
+            <div class="section-title">柜体分布</div>
+            <div class="page-mark">按预警数排序</div>
+          </div>
+
+          <div class="distribution">
+            <div class="dist-row">
+              <div class="dist-name">一号工具柜</div>
+              <div class="dist-track"><div class="dist-fill" style="width: 100%;"></div></div>
+              <div class="dist-count">4</div>
+            </div>
+            <div class="dist-row">
+              <div class="dist-name">二号工具柜</div>
+              <div class="dist-track"><div class="dist-fill" style="width: 75%;"></div></div>
+              <div class="dist-count">3</div>
+            </div>
+            <div class="dist-row">
+              <div class="dist-name">三号工具柜</div>
+              <div class="dist-track"><div class="dist-fill" style="width: 25%;"></div></div>
+              <div class="dist-count">1</div>
+            </div>
+          </div>
+
+          <div class="side-note">
+            下一组将展示剩余 4 条预警货道。电视大屏场景下每 8 秒自动切换，默认始终先展示断供和最低库存比例货道。
+          </div>
+        </aside>
+      </section>
+
+      <footer class="footer">
+        <div>排序规则：断供优先，其次按库存比例从低到高，同柜体货道尽量聚合。</div>
+        <div class="dots" aria-label="轮播页码">
+          <span class="dot active"></span>
+          <span class="dot"></span>
+        </div>
+      </footer>
+    </section>
+  </main>
+</body>
+</html>

@@ -11,8 +11,8 @@
             <path d="M21 15.5c-.3-2.5-2.8-4.5-5.5-4.5s-5.2 2-5.5 4.5"/>
           </svg>
         </div>
-        <h1 class="login-title">智能工具柜</h1>
-        <p class="login-subtitle">数字看板管理系统</p>
+        <h1 class="login-title">刀具柜看板</h1>
+        <p class="login-subtitle">刀具库存与货道状态管理</p>
       </div>
 
       <!-- 登录表单 -->
@@ -96,8 +96,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { api } from '@/services/api'
+import { authApi } from '@/services/authApi'
 import { useAuthStore } from '@/stores/auth'
+import { startDefaultPollingTasks } from '@/services/polling'
 
 // Router and Store
 const router = useRouter()
@@ -140,15 +141,26 @@ const handleLogin = async () => {
   errorMessage.value = ''
 
   try {
-    const response = await api.auth.login(
+    const response = await authApi.login(
       loginForm.value.mobile,
       loginForm.value.password,
       loginForm.value.tokenCode
     )
 
-    if (response.code === 'OK' && response.data?.token) {
+    const responseData = response.data || {}
+    const authToken = responseData.token || responseData.user?.token
+    const apiBaseUrl = responseData.ct_url || responseData.serverUrl || responseData.user?.ct_url || responseData.user?.serverUrl
+    const userInfo = {
+      ...(responseData.user || responseData),
+      ...(apiBaseUrl ? { ct_url: apiBaseUrl } : {})
+    }
+
+    if (response.code === 'OK' && authToken) {
       // 使用认证store保存登录状态
-      authStore.login(response.data.token, response.data.user)
+      authStore.login(authToken, userInfo)
+
+      // 登录成功后再启动刀具柜轮询，避免卡片保留登录前的未授权错误
+      startDefaultPollingTasks()
 
       // 跳转到主页面
       router.push('/dashboard')

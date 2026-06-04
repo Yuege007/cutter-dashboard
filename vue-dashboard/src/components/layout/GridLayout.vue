@@ -1,5 +1,9 @@
 <template>
-  <div class="grid-layout-container" :style="{ minHeight: `${dynamicHeight}px` }">
+  <div
+    class="grid-layout-container"
+    :class="{ 'is-grid-dragging': isDragging }"
+    :style="{ minHeight: `${dynamicHeight}px` }"
+  >
     <GridLayout
       v-model:layout="layoutData"
       :col-num="colNum"
@@ -61,7 +65,7 @@
     <EmptyState
       v-if="layoutData.length === 0"
       title="看板为空"
-      description="从左侧拖拽卡片到这里开始构建您的数字看板"
+      description="从左侧拖拽卡片到这里开始构建刀具柜看板"
       :icon-component="DashboardIcon"
       size="lg"
       custom-class="absolute inset-0"
@@ -117,6 +121,7 @@ const windowHeight = ref(window.innerHeight)
 const headerHeight = ref(64) // 工具栏高度
 const footerHeight = ref(0)  // 底部区域高度
 const isDragging = ref(false) // 拖拽状态
+const draggingItemId = ref<string | null>(null)
 
 // 监听窗口大小变化
 const updateWindowHeight = () => {
@@ -242,8 +247,8 @@ const getCardProps = (itemId: string) => {
     // 传递模式锁定：强制模式 & UI状态
     forcedMode: card.lockedMode || undefined,
     modeLocked: !!card.lockedMode,
-    // 传递拖拽状态
-    isDragging: isDragging.value,
+    // 只把拖拽状态传给当前正在拖拽的卡片，避免其它 full 卡片跟着重绘
+    isDragging: draggingItemId.value === itemId,
     cardId: itemId
   }
 }
@@ -272,18 +277,7 @@ const onLayoutReady = (newLayout: LayoutItem[]) => {
 }
 
 const onLayoutUpdated = (newLayout: LayoutItem[]) => {
-  // 更新 cardStore 中的位置信息
-  newLayout.forEach(item => {
-    cardStore.updateCardPosition(item.i, {
-      x: item.x,
-      y: item.y
-    })
-    cardStore.updateCardSize(item.i, {
-      w: item.w,
-      h: item.h
-    })
-  })
-
+  if (isDragging.value) return
   emit('layoutUpdated', newLayout)
 }
 
@@ -293,16 +287,31 @@ const onBreakpointChanged = (newBreakpoint: string, newLayout: LayoutItem[]) => 
 
 // 项目事件处理
 const onItemResize = (i: string, h: number, w: number, hPx: number, wPx: number) => {
-  // 项目调整大小处理
+  draggingItemId.value = i
+  isDragging.value = true
 }
 
 const onItemMove = (i: string, x: number, y: number) => {
   // 设置拖拽状态，增加额外空间
+  draggingItemId.value = i
   isDragging.value = true
 }
 
 const onItemResized = (i: string, h: number, w: number, _hPx: number, _wPx: number) => {
+  draggingItemId.value = i
+
   cardStore.updateCardSize(i, { w, h })
+  const item = layoutData.value.find(item => item.i === i)
+  if (item) {
+    cardStore.updateCardPosition(i, { x: item.x, y: item.y })
+  }
+  emit('layoutUpdated', layoutData.value)
+
+  setTimeout(() => {
+    isDragging.value = false
+    draggingItemId.value = null
+  }, 150)
+
   // 调整大小后重新计算高度
   nextTick(() => {
     // 高度会自动重新计算
@@ -310,11 +319,19 @@ const onItemResized = (i: string, h: number, w: number, _hPx: number, _wPx: numb
 }
 
 const onItemMoved = (i: string, x: number, y: number) => {
+  draggingItemId.value = i
+  const item = layoutData.value.find(item => item.i === i)
+
   cardStore.updateCardPosition(i, { x, y })
+  if (item) {
+    cardStore.updateCardSize(i, { w: item.w, h: item.h })
+  }
+  emit('layoutUpdated', layoutData.value)
 
   // 延迟恢复工具栏交互，防止意外点击
   setTimeout(() => {
     isDragging.value = false
+    draggingItemId.value = null
   }, 150) // 150ms延迟
 
   // 移动后重新计算高度
@@ -434,6 +451,16 @@ defineExpose({
 
 :deep(.vue-grid-item) {
   transition: all 0.2s ease;
+}
+
+.is-grid-dragging :deep(.vue-grid-item),
+.is-grid-dragging :deep(.apple-card),
+.is-grid-dragging :deep(.card-toolbar) {
+  transition: none !important;
+}
+
+.is-grid-dragging :deep(.apple-card) {
+  backdrop-filter: none;
 }
 
 :deep(.vue-grid-item.vue-grid-placeholder) {

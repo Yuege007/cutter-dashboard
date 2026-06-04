@@ -4,7 +4,6 @@
  */
 
 import { getCacheManager, getCacheMonitor, initCacheMonitoring } from './index'
-import { smartCacheRefresh } from '../cachedApi'
 
 /**
  * 初始化缓存系统
@@ -35,20 +34,12 @@ export async function initCacheSystem() {
       console.log('🔍 缓存监控将在200ms后启动')
     }
     
-    // 4. 启动智能刷新策略
-    smartCacheRefresh.startPeriodicRefresh()
+    // 4. 停用旧业务刷新策略
+    // 旧工具柜 API 的定时刷新已停用。
+    // 当前刀具柜数据由 polling.ts 统一拉取，避免启动阶段请求旧业务接口。
     
-    // 5. 预热常用数据 (延迟执行，避免阻塞应用启动)
-    setTimeout(async () => {
-      try {
-        const cachedApiModule = await import('../cachedApi')
-        const cachedApi = cachedApiModule.default
-        await cachedApi.cache.warmupCommonData()
-      } catch (error) {
-        console.warn('缓存预热失败:', error)
-      }
-    }, 2000)
-    
+    // 5. 旧工具柜常用数据预热已停用。后续如需要预热，应改为刀具柜 cutter-* 数据。
+
     // 6. 设置页面卸载时的清理
     setupCleanupHandlers(cacheManager)
     

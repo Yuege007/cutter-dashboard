@@ -49,7 +49,7 @@ export interface CardConfig {
   resizable?: boolean // 是否可调整大小
   draggable?: boolean // 是否可拖拽
   renderModes: CardRenderModes
-  icon?: string
+  icon?: string | Component
   color?: string
   configSchema?: Record<string, any> // 配置表单架构
 }
@@ -174,6 +174,44 @@ export interface SlotMaterial {
   singleWeight: number
 }
 
+// 货道库存预警查询参数
+export interface ChannelInventoryAlarmRequest {
+  cuttingToolsId?: number
+  disItemNo?: number
+  itemNoPrefix?: string
+  rwarnFlag?: number
+  cuttingNo?: string
+  cuttingName?: string
+  pageNum?: number
+  pageSize?: number
+}
+
+// 货道库存预警记录
+export interface ChannelInventoryAlarmRecord {
+  id: number
+  cuttingToolsId: number
+  cuttingBoxInfoId: number
+  inventory: number
+  surplus: number
+  itmeNo?: string
+  disItemNo?: number
+  bindNum?: number
+  itemNoAlias?: string
+  itemNoPrefix?: string
+  isPid?: number
+  orderId?: number
+  company?: string
+  cuttingName?: string
+  cuttingNo?: string
+  exState?: number
+  cuttingBoxInfo?: SlotMaterial
+}
+
+export interface ChannelInventoryAlarmData {
+  totalCount: number
+  recordList: ChannelInventoryAlarmRecord[]
+}
+
 // 工具柜工具信息
 export interface CabinetTool {
   surplus: number
@@ -225,6 +263,54 @@ export interface PickupRecord {
   singleWeight: number
   packWeight: number
   totalWeight: number
+}
+
+// 历史补货记录查询参数
+export interface ReplenishmentListRequest {
+  pageNum?: number
+  pageSize?: number
+  dayNum?: number
+  endTimeStr?: string
+  boxInfoId?: number
+}
+
+// 公司维度补货记录
+export interface ReplenishmentSummaryRecord {
+  boxInfoId: number
+  productName: string
+  brandName: string
+  specification: string
+  cuttingNo: string
+  materialCode: string
+  cutterType: string
+  restockingNum: number
+  restockingCount: number
+  createTime?: string
+  restockingTime?: string
+  lastTime?: string
+}
+
+// 物料维度补货记录
+export interface ReplenishmentDetailRecord {
+  consumableType: string
+  boxInfoId: number
+  productName: string
+  itemNoAlias: string
+  createTime: string
+  createBy: string
+  brandName: string
+  cCount: number
+  specification: string
+  cuttingNo: string
+  newRepertory: number
+  oldRepertory: number
+  materialCode: string
+  cutterType: string
+}
+
+export interface ReplenishmentListData<T = ReplenishmentSummaryRecord | ReplenishmentDetailRecord> {
+  totalCount: number
+  recordList: T[]
 }
 
 // 用户信息

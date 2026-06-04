@@ -12,7 +12,7 @@ const routes: RouteRecordRaw[] = [
     name: 'Login',
     component: () => import('@/views/Login.vue'),
     meta: {
-      title: '登录 - 智能工具柜数字看板',
+      title: '登录 - 刀具柜数字看板',
       requiresAuth: false
     }
   },
@@ -21,7 +21,7 @@ const routes: RouteRecordRaw[] = [
     name: 'Dashboard',
     component: () => import('@/views/Dashboard.vue'),
     meta: {
-      title: '数字看板 - 智能工具柜管理系统',
+      title: '刀具柜数字看板',
       requiresAuth: true
     }
   },

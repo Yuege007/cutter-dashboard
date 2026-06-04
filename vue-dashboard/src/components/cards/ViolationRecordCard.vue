@@ -1,7 +1,7 @@
 <template>
   <BaseCard
     :title="title"
-    variant="success"
+    variant="danger"
     :mode="displayMode"
     :width="width"
     :height="height"
@@ -22,8 +22,9 @@
   >
     <template v-if="displayMode === 'mini'">
       <div class="mini-view">
-        <strong>{{ todayReturnCount }}</strong>
-        <span>今日归还</span>
+        <strong>{{ violationCount }}</strong>
+        <span>违规记录</span>
+        <b>{{ uniqueUserCount }} 人</b>
       </div>
     </template>
 
@@ -31,28 +32,29 @@
       <div class="compact-view">
         <section class="summary-row">
           <div>
-            <span>近7天归还</span>
-            <strong>{{ weekReturnCount }}</strong>
+            <span>近7天违规</span>
+            <strong class="danger">{{ violationCount }}</strong>
           </div>
           <div>
-            <span>归还人员</span>
-            <strong>{{ returnUserCount }}</strong>
+            <span>涉及人员</span>
+            <strong>{{ uniqueUserCount }}</strong>
           </div>
           <div>
-            <span>归还金额</span>
-            <strong>{{ formatMoney(weekReturnAmount) }}</strong>
+            <span>涉及刀具</span>
+            <strong>{{ materialCount }}</strong>
           </div>
         </section>
 
-        <div class="return-list">
-          <div v-for="record in recentReturns.slice(0, 5)" :key="record.id || `${record.returnTime}-${record.materialCode}`" class="return-row">
-            <div class="return-main">
-              <strong>{{ record.productName }}</strong>
-              <span>{{ record.returnUserName || record.userName }} / {{ formatShortTime(record.returnTime) }}</span>
+        <div class="violation-list">
+          <div v-for="record in recentViolations.slice(0, 5)" :key="record.id || `${record.payTime}-${record.materialCode}`" class="violation-row">
+            <span class="risk-strip"></span>
+            <div class="violation-main">
+              <strong>{{ record.userName }}</strong>
+              <span>{{ record.productName }} / {{ record.violationReason || '违规' }}</span>
             </div>
             <b>{{ record.payNum }}</b>
           </div>
-          <div v-if="!recentReturns.length" class="empty-state">暂无归还记录</div>
+          <div v-if="!recentViolations.length" class="empty-state">暂无违规记录</div>
         </div>
       </div>
     </template>
@@ -61,49 +63,51 @@
       <div class="full-view">
         <section class="summary-row">
           <div>
-            <span>近7天归还</span>
-            <strong>{{ weekReturnCount }}</strong>
+            <span>近7天违规</span>
+            <strong class="danger">{{ violationCount }}</strong>
           </div>
           <div>
-            <span>归还人员</span>
-            <strong>{{ returnUserCount }}</strong>
+            <span>涉及人员</span>
+            <strong>{{ uniqueUserCount }}</strong>
           </div>
           <div>
             <span>涉及刀具</span>
             <strong>{{ materialCount }}</strong>
           </div>
           <div>
-            <span>归还金额</span>
-            <strong>{{ formatMoney(weekReturnAmount) }}</strong>
+            <span>违规数量</span>
+            <strong>{{ violationItemCount }}</strong>
           </div>
         </section>
 
-        <div class="table-wrap">
-          <table v-if="recentReturns.length" class="return-table">
-            <thead>
-              <tr>
-                <th>刀具</th>
-                <th>品牌/规格</th>
-                <th>领刀人</th>
-                <th>归还人</th>
-                <th>数量</th>
-                <th>领刀时间</th>
-                <th>归还时间</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="record in recentReturns" :key="record.id || `${record.returnTime}-${record.materialCode}`">
-                <td class="strong-cell">{{ record.productName }}</td>
-                <td>{{ record.brandName || '-' }} / {{ record.specification || '-' }}</td>
-                <td>{{ record.userName || '-' }}</td>
-                <td>{{ record.returnUserName || record.userName || '-' }}</td>
-                <td class="number-cell">{{ record.payNum }}</td>
-                <td>{{ formatShortTime(record.payTime) }}</td>
-                <td>{{ formatShortTime(record.returnTime) }}</td>
-              </tr>
-            </tbody>
-          </table>
-          <div v-else class="empty-state">暂无归还记录</div>
+        <div class="full-content">
+          <div class="table-wrap">
+            <table v-if="recentViolations.length" class="violation-table">
+              <thead>
+                <tr>
+                  <th>时间</th>
+                  <th>人员</th>
+                  <th>刀具</th>
+                  <th>刀柜/货道</th>
+                  <th>数量</th>
+                  <th>原因</th>
+                  <th>确认时间</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="record in recentViolations" :key="record.id || `${record.payTime}-${record.materialCode}`">
+                  <td>{{ formatShortTime(record.payTime || record.confirmTime) }}</td>
+                  <td class="strong-cell">{{ record.userName }}</td>
+                  <td>{{ record.productName }}</td>
+                  <td>{{ record.cuttingName || '-' }} / {{ record.itemNoAlias || '-' }}</td>
+                  <td class="number-cell">{{ record.payNum }}</td>
+                  <td class="reason-cell">{{ record.violationReason || '违规' }}</td>
+                  <td>{{ formatShortTime(record.confirmTime) }}</td>
+                </tr>
+              </tbody>
+            </table>
+            <div v-else class="empty-state">暂无违规记录</div>
+          </div>
         </div>
       </div>
     </template>
@@ -133,14 +137,14 @@ const props = withDefaults(defineProps<{
   minWidth?: number
   minHeight?: number
 }>(), {
-  title: '归还追踪',
+  title: '异常违规记录',
   showRefresh: true,
   showSettings: true,
   locked: false,
   modeLocked: false,
-  width: 4,
+  width: 5,
   height: 3,
-  minWidth: 2,
+  minWidth: 3,
   minHeight: 2
 })
 
@@ -157,14 +161,13 @@ const loading = ref(false)
 const error = ref('')
 
 const displayMode = computed<CardMode>(() => props.forcedMode || detectCardMode(props.width, props.height))
-const storeRecords = computed<CutterBorrowRecord[]>(() => dataStore.getData('cutter-return-records') || [])
-const records = computed(() => (storeRecords.value.length ? storeRecords.value : localRecords.value).filter(record => record.returnTime).sort(sortByReturnTimeDesc))
-const recentReturns = computed(() => records.value.slice(0, 30))
-const todayReturnCount = computed(() => sumCount(records.value.filter(record => isSameDay(record.returnTime, new Date()))))
-const weekReturnCount = computed(() => sumCount(records.value))
-const weekReturnAmount = computed(() => records.value.reduce((sum, record) => sum + record.amount, 0))
-const returnUserCount = computed(() => new Set(records.value.map(record => record.returnUserId || record.returnUserName || record.userName)).size)
+const storeRecords = computed<CutterBorrowRecord[]>(() => dataStore.getData('cutter-violation-records') || [])
+const records = computed(() => (storeRecords.value.length ? storeRecords.value : localRecords.value).slice().sort(sortByRiskTimeDesc))
+const recentViolations = computed(() => records.value.slice(0, 40))
+const violationCount = computed(() => records.value.length)
+const uniqueUserCount = computed(() => new Set(records.value.map(record => record.userId || record.workNo || record.userName)).size)
 const materialCount = computed(() => new Set(records.value.map(record => record.materialCode || record.productName)).size)
+const violationItemCount = computed(() => records.value.reduce((sum, record) => sum + record.payNum, 0))
 
 watch(storeRecords, value => {
   if (value.length) {
@@ -187,7 +190,7 @@ async function loadData() {
   error.value = ''
   try {
     const { start, end } = getRecentRange(7)
-    const response = await cutterApi.borrow.getReturnRecords({
+    const response = await cutterApi.violation.getViolationRecords({
       startTime: start,
       endTime: end,
       page: 1,
@@ -195,7 +198,7 @@ async function loadData() {
     })
     localRecords.value = cutterAdapter.getRows(response.data).map(cutterAdapter.mapBorrowRecord)
   } catch (err) {
-    error.value = err instanceof Error ? err.message : '归还记录加载失败'
+    error.value = err instanceof Error ? err.message : '异常违规记录加载失败'
   } finally {
     loading.value = false
   }
@@ -212,12 +215,8 @@ function getRecentRange(days: number) {
   }
 }
 
-function sortByReturnTimeDesc(a: CutterBorrowRecord, b: CutterBorrowRecord) {
-  return parseDate(b.returnTime).getTime() - parseDate(a.returnTime).getTime()
-}
-
-function isSameDay(value: string, date: Date) {
-  return formatDate(parseDate(value)) === formatDate(date)
+function sortByRiskTimeDesc(a: CutterBorrowRecord, b: CutterBorrowRecord) {
+  return parseDate(b.confirmTime || b.payTime).getTime() - parseDate(a.confirmTime || a.payTime).getTime()
 }
 
 function parseDate(value: string) {
@@ -240,15 +239,6 @@ function formatShortTime(value: string) {
   if (date.getTime() <= 0) return '-'
   return `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
 }
-
-function sumCount(source: CutterBorrowRecord[]) {
-  return source.reduce((sum, record) => sum + record.payNum, 0)
-}
-
-function formatMoney(value: number) {
-  if (value >= 10000) return `${(value / 10000).toFixed(1)}万`
-  return value.toFixed(0)
-}
 </script>
 
 <style scoped>
@@ -264,12 +254,13 @@ function formatMoney(value: number) {
 .mini-view strong {
   font-size: 34px;
   line-height: 1;
-  color: var(--color-success);
+  color: var(--color-danger);
 }
 
 .mini-view span,
+.mini-view b,
 .summary-row span,
-.return-row span {
+.violation-row span {
   color: var(--color-text-secondary);
   font-size: 12px;
 }
@@ -309,7 +300,11 @@ function formatMoney(value: number) {
   color: var(--color-text);
 }
 
-.return-list {
+.danger {
+  color: var(--color-danger) !important;
+}
+
+.violation-list {
   flex: 1;
   min-height: 0;
   overflow: auto;
@@ -318,60 +313,68 @@ function formatMoney(value: number) {
   gap: 7px;
 }
 
-.return-row {
-  display: flex;
+.violation-row {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
   padding: 8px 10px;
   border-radius: 8px;
-  background: rgba(148, 163, 184, 0.06);
+  background: rgba(239, 68, 68, 0.06);
 }
 
-.return-main {
+.risk-strip {
+  width: 8px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--color-danger);
+}
+
+.violation-main {
   min-width: 0;
 }
 
-.return-main strong,
-.return-main span {
+.violation-main strong,
+.violation-main span {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.return-main strong {
+.violation-main strong {
   color: var(--color-text);
   font-size: 13px;
 }
 
-.return-row b,
+.violation-row b,
 .number-cell {
-  color: var(--color-success);
+  color: var(--color-danger);
   font-weight: 700;
 }
 
+.full-content,
 .table-wrap {
   flex: 1;
   min-height: 0;
   overflow: auto;
 }
 
-.return-table {
+.violation-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 12px;
 }
 
-.return-table th,
-.return-table td {
+.violation-table th,
+.violation-table td {
   padding: 9px 8px;
   border-bottom: 1px solid rgba(148, 163, 184, 0.12);
   text-align: left;
   white-space: nowrap;
 }
 
-.return-table th {
+.violation-table th {
   color: var(--color-text-secondary);
   font-weight: 600;
 }
@@ -379,6 +382,12 @@ function formatMoney(value: number) {
 .strong-cell {
   color: var(--color-text);
   font-weight: 600;
+}
+
+.reason-cell {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .empty-state {

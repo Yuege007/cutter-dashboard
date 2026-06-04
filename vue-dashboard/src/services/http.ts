@@ -48,6 +48,13 @@ class HttpClient {
     this.token = token
   }
 
+  // 设置 API 基础地址
+  setBaseURL(baseURL: string) {
+    if (baseURL) {
+      this.config.baseURL = baseURL.replace(/\/$/, '')
+    }
+  }
+
   // 清除 token
   clearToken() {
     this.token = null
@@ -55,7 +62,24 @@ class HttpClient {
 
   // 构建完整 URL
   private buildURL(url: string, params?: Record<string, any>): string {
-    const fullURL = url.startsWith('http') ? url : `${this.config.baseURL}${url}`
+    let fullURL = url
+    if (!url.startsWith('http')) {
+      const baseURL = this.config.baseURL.replace(/\/$/, '')
+      let path = url.startsWith('/') ? url : `/${url}`
+
+      try {
+        const basePath = new URL(baseURL).pathname.replace(/\/$/, '')
+        if (basePath.endsWith('/plat/cutterApi') && path.startsWith('/plat/cutterApi/')) {
+          path = path.slice('/plat/cutterApi'.length)
+        } else if (basePath.endsWith('/plat') && path.startsWith('/plat/')) {
+          path = path.slice('/plat'.length)
+        }
+      } catch {
+        // baseURL is configured as a plain prefix; fall back to direct concatenation.
+      }
+
+      fullURL = `${baseURL}${path}`
+    }
     
     if (!params) return fullURL
     

@@ -1,25 +1,59 @@
 import { defineAsyncComponent, markRaw } from 'vue'
 import type { CardConfig } from '@/types'
+import CutterBorrowIcon from '@/components/icons/cutter/CutterBorrowIcon.vue'
+import CutterCabinetIcon from '@/components/icons/cutter/CutterCabinetIcon.vue'
+import CutterRankingIcon from '@/components/icons/cutter/CutterRankingIcon.vue'
+import CutterReturnIcon from '@/components/icons/cutter/CutterReturnIcon.vue'
+import CutterStockFlowIcon from '@/components/icons/cutter/CutterStockFlowIcon.vue'
+import CutterToolIcon from '@/components/icons/cutter/CutterToolIcon.vue'
+import CutterViolationIcon from '@/components/icons/cutter/CutterViolationIcon.vue'
+import CutterWarningIcon from '@/components/icons/cutter/CutterWarningIcon.vue'
 
-// 异步加载卡片组件（使用markRaw防止响应式化）
-const InventoryAlarmCard = markRaw(defineAsyncComponent(() => import('@/components/cards/InventoryAlarmCard.vue')))
 const MaterialOverviewCard = markRaw(defineAsyncComponent(() => import('@/components/cards/MaterialOverviewCard.vue')))
+const InventoryAlarmCard = markRaw(defineAsyncComponent(() => import('@/components/cards/InventoryAlarmCard.vue')))
 const CabinetStatusCard = markRaw(defineAsyncComponent(() => import('@/components/cards/CabinetStatusCard.vue')))
 const InOutTrendCard = markRaw(defineAsyncComponent(() => import('@/components/cards/InOutTrendCard.vue')))
 const UserRankingCard = markRaw(defineAsyncComponent(() => import('@/components/cards/UserRankingCard.vue')))
 const MaterialReturnCard = markRaw(defineAsyncComponent(() => import('@/components/cards/MaterialReturnCard.vue')))
+const StockChangeCard = markRaw(defineAsyncComponent(() => import('@/components/cards/StockChangeCard.vue')))
+const ViolationRecordCard = markRaw(defineAsyncComponent(() => import('@/components/cards/ViolationRecordCard.vue')))
 
-// 卡片配置
 export const cardConfigs: CardConfig[] = [
-  // 库存状态概览卡片
+  {
+    id: 'material-overview-card',
+    name: '刀具库存总览',
+    description: '展示刀具种类、总库存、库存价值和库存预警概览',
+    icon: markRaw(CutterToolIcon),
+    category: 'inventory',
+    component: MaterialOverviewCard,
+    defaultSize: { w: 5, h: 3 },
+    minSize: { w: 2, h: 2 },
+    draggable: true,
+    resizable: true,
+    renderModes: {
+      mini: MaterialOverviewCard,
+      compact: MaterialOverviewCard,
+      full: MaterialOverviewCard
+    },
+    defaultProps: {
+      title: '刀具库存总览',
+      showRefresh: true,
+      showSettings: true
+    },
+    configSchema: {
+      title: { type: 'string', label: '标题', required: true },
+      showRefresh: { type: 'boolean', label: '显示刷新按钮', default: true },
+      showSettings: { type: 'boolean', label: '显示设置按钮', default: true }
+    }
+  },
   {
     id: 'inventory-alarm-card',
     name: '库存预警',
-    description: '监控库存预警状态，显示紧缺物料信息',
-    icon: '⚠️',
+    description: '聚合耗材库存预警和刀柜货道预警，突出断供与低库存',
+    icon: markRaw(CutterWarningIcon),
     category: 'inventory',
     component: InventoryAlarmCard,
-    defaultSize: { w: 3, h: 2 },
+    defaultSize: { w: 4, h: 3 },
     minSize: { w: 2, h: 2 },
     draggable: true,
     resizable: true,
@@ -39,74 +73,14 @@ export const cardConfigs: CardConfig[] = [
       showSettings: { type: 'boolean', label: '显示设置按钮', default: true }
     }
   },
-
-  // 物料库存总览卡片
-  {
-    id: 'material-overview-card',
-    name: '物料库存总览',
-    description: '展示物料库存的全局概览，包括种类、数量和价值统计',
-    icon: '📦',
-    category: 'inventory',
-    component: MaterialOverviewCard,
-    defaultSize: { w: 4, h: 3 },
-    minSize: { w: 2, h: 2 },
-    draggable: true,
-    resizable: true,
-    renderModes: {
-      mini: MaterialOverviewCard,
-      compact: MaterialOverviewCard,
-      full: MaterialOverviewCard
-    },
-    defaultProps: {
-      title: '物料库存总览',
-      showRefresh: true,
-      showSettings: true
-    },
-    configSchema: {
-      title: { type: 'string', label: '标题', required: true },
-      showRefresh: { type: 'boolean', label: '显示刷新按钮', default: true },
-      showSettings: { type: 'boolean', label: '显示设置按钮', default: true }
-    }
-  },
-
-  // 出入库趋势卡片
-  {
-    id: 'in-out-trend-card',
-    name: '出入库趋势',
-    description: '展示物料出入库的时间趋势和统计分析',
-    icon: '📊',
-    category: 'analytics',
-    component: InOutTrendCard,
-    defaultSize: { w: 4, h: 3 },
-    minSize: { w: 2, h: 2 },
-    draggable: true,
-    resizable: true,
-    renderModes: {
-      mini: InOutTrendCard,
-      compact: InOutTrendCard,
-      full: InOutTrendCard
-    },
-    defaultProps: {
-      title: '出入库趋势',
-      showRefresh: true,
-      showSettings: true
-    },
-    configSchema: {
-      title: { type: 'string', label: '标题', required: true },
-      showRefresh: { type: 'boolean', label: '显示刷新按钮', default: true },
-      showSettings: { type: 'boolean', label: '显示设置按钮', default: true }
-    }
-  },
-
-  // 智能柜状态监控卡片
   {
     id: 'cabinet-status-card',
-    name: '智能柜状态监控',
-    description: '监控智能柜设备运行状态，查看货道详情',
-    icon: '🏪',
+    name: '刀柜货道状态',
+    description: '按刀柜展示货道库存、空货道和低库存货道状态',
+    icon: markRaw(CutterCabinetIcon),
     category: 'device',
     component: CabinetStatusCard,
-    defaultSize: { w: 4, h: 3 },
+    defaultSize: { w: 5, h: 4 },
     minSize: { w: 2, h: 2 },
     draggable: true,
     resizable: true,
@@ -116,7 +90,7 @@ export const cardConfigs: CardConfig[] = [
       full: CabinetStatusCard
     },
     defaultProps: {
-      title: '智能柜监控',
+      title: '刀柜货道状态',
       showRefresh: true,
       showSettings: true
     },
@@ -126,17 +100,42 @@ export const cardConfigs: CardConfig[] = [
       showSettings: { type: 'boolean', label: '显示设置按钮', default: true }
     }
   },
-
-  // 领用排行榜卡片
+  {
+    id: 'in-out-trend-card',
+    name: '领刀趋势',
+    description: '按时间展示领刀数量、金额和最近领刀记录',
+    icon: markRaw(CutterBorrowIcon),
+    category: 'analytics',
+    component: InOutTrendCard,
+    defaultSize: { w: 5, h: 3 },
+    minSize: { w: 3, h: 2 },
+    draggable: true,
+    resizable: true,
+    renderModes: {
+      mini: InOutTrendCard,
+      compact: InOutTrendCard,
+      full: InOutTrendCard
+    },
+    defaultProps: {
+      title: '领刀趋势',
+      showRefresh: true,
+      showSettings: true
+    },
+    configSchema: {
+      title: { type: 'string', label: '标题', required: true },
+      showRefresh: { type: 'boolean', label: '显示刷新按钮', default: true },
+      showSettings: { type: 'boolean', label: '显示设置按钮', default: true }
+    }
+  },
   {
     id: 'user-ranking-card',
-    name: '领用排行榜',
-    description: '展示用户领用行为分析，激励和展示人员的物料领用情况',
-    icon: '🏆',
+    name: '领刀排行',
+    description: '按人员统计近15天领刀数量和领刀金额排行',
+    icon: markRaw(CutterRankingIcon),
     category: 'analytics',
     component: UserRankingCard,
     defaultSize: { w: 4, h: 3 },
-    minSize: { w: 2, h: 2 },
+    minSize: { w: 3, h: 2 },
     draggable: true,
     resizable: true,
     renderModes: {
@@ -145,7 +144,7 @@ export const cardConfigs: CardConfig[] = [
       full: UserRankingCard
     },
     defaultProps: {
-      title: '领用排行榜',
+      title: '领刀排行',
       showRefresh: true,
       showSettings: true
     },
@@ -155,17 +154,15 @@ export const cardConfigs: CardConfig[] = [
       showSettings: { type: 'boolean', label: '显示设置按钮', default: true }
     }
   },
-
-  // 物料归还追踪卡片
   {
     id: 'material-return-card',
-    name: '物料归还追踪',
-    description: '追踪物料的归还情况，便于管理和追溯，提供归还记录的详细分析',
-    icon: '↩️',
-    category: 'tracking',
+    name: '归还追踪',
+    description: '按归还时间展示近7天归还数量、归还人员和明细记录',
+    icon: markRaw(CutterReturnIcon),
+    category: 'analytics',
     component: MaterialReturnCard,
-    defaultSize: { w: 4, h: 3 },
-    minSize: { w: 2, h: 2 },
+    defaultSize: { w: 5, h: 3 },
+    minSize: { w: 3, h: 2 },
     draggable: true,
     resizable: true,
     renderModes: {
@@ -174,7 +171,61 @@ export const cardConfigs: CardConfig[] = [
       full: MaterialReturnCard
     },
     defaultProps: {
-      title: '物料归还追踪',
+      title: '归还追踪',
+      showRefresh: true,
+      showSettings: true
+    },
+    configSchema: {
+      title: { type: 'string', label: '标题', required: true },
+      showRefresh: { type: 'boolean', label: '显示刷新按钮', default: true },
+      showSettings: { type: 'boolean', label: '显示设置按钮', default: true }
+    }
+  },
+  {
+    id: 'stock-change-card',
+    name: '库存变更记录',
+    description: '展示刀柜货道库存变更、入库出库净变化和操作明细',
+    icon: markRaw(CutterStockFlowIcon),
+    category: 'analytics',
+    component: StockChangeCard,
+    defaultSize: { w: 5, h: 3 },
+    minSize: { w: 3, h: 2 },
+    draggable: true,
+    resizable: true,
+    renderModes: {
+      mini: StockChangeCard,
+      compact: StockChangeCard,
+      full: StockChangeCard
+    },
+    defaultProps: {
+      title: '库存变更记录',
+      showRefresh: true,
+      showSettings: true
+    },
+    configSchema: {
+      title: { type: 'string', label: '标题', required: true },
+      showRefresh: { type: 'boolean', label: '显示刷新按钮', default: true },
+      showSettings: { type: 'boolean', label: '显示设置按钮', default: true }
+    }
+  },
+  {
+    id: 'violation-record-card',
+    name: '异常违规记录',
+    description: '展示近7天违规借刀记录、涉及人员和风险明细',
+    icon: markRaw(CutterViolationIcon),
+    category: 'analytics',
+    component: ViolationRecordCard,
+    defaultSize: { w: 5, h: 3 },
+    minSize: { w: 3, h: 2 },
+    draggable: true,
+    resizable: true,
+    renderModes: {
+      mini: ViolationRecordCard,
+      compact: ViolationRecordCard,
+      full: ViolationRecordCard
+    },
+    defaultProps: {
+      title: '异常违规记录',
       showRefresh: true,
       showSettings: true
     },
@@ -186,7 +237,6 @@ export const cardConfigs: CardConfig[] = [
   }
 ]
 
-// 注册所有卡片的函数
 export function registerAllCards(cardStore: any) {
   cardConfigs.forEach(config => {
     cardStore.registerCard(config)

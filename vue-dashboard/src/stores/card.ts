@@ -9,6 +9,7 @@ export const useCardStore = defineStore('card', () => {
   const registeredCards = ref<Map<string, CardConfig>>(new Map())
   const activeCards = ref<Map<string, CardInstance>>(new Map())
   const cardData = ref<Map<string, any>>(new Map())
+  let saveTimer: ReturnType<typeof setTimeout> | undefined
 
   // 计算属性
   const availableCards = computed(() => {
@@ -138,16 +139,18 @@ export const useCardStore = defineStore('card', () => {
   const updateCardPosition = (cardId: string, position: { x: number; y: number }) => {
     const card = activeCards.value.get(cardId)
     if (card) {
+      if (card.position?.x === position.x && card.position?.y === position.y) return
       card.position = position
-      saveToLocalStorage()
+      scheduleSaveToLocalStorage()
     }
   }
 
   const updateCardSize = (cardId: string, size: { w: number; h: number }) => {
     const card = activeCards.value.get(cardId)
     if (card) {
+      if (card.size?.w === size.w && card.size?.h === size.h) return
       card.size = size
-      saveToLocalStorage()
+      scheduleSaveToLocalStorage()
     }
   }
 
@@ -203,6 +206,11 @@ export const useCardStore = defineStore('card', () => {
   }
 
   const saveToLocalStorage = () => {
+    if (saveTimer) {
+      clearTimeout(saveTimer)
+      saveTimer = undefined
+    }
+
     try {
       const cardsData = Array.from(activeCards.value.values()).map(card => ({
         cardId: card.cardId,
@@ -216,6 +224,13 @@ export const useCardStore = defineStore('card', () => {
     } catch (error) {
       console.error('❌ 卡片数据保存失败:', (error as any)?.message || error)
     }
+  }
+
+  const scheduleSaveToLocalStorage = () => {
+    if (saveTimer) clearTimeout(saveTimer)
+    saveTimer = setTimeout(() => {
+      saveToLocalStorage()
+    }, 250)
   }
 
   const loadFromLocalStorage = () => {

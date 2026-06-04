@@ -21,6 +21,8 @@ export interface UserInfo {
     id: number
     workShopName: string
   }>
+  ct_url?: string
+  serverUrl?: string
 }
 
 export const useAuthStore = defineStore('auth', () => {
@@ -33,13 +35,22 @@ export const useAuthStore = defineStore('auth', () => {
   const login = (authToken: string, userInfo: UserInfo) => {
     token.value = authToken
     user.value = userInfo
+    const apiBaseUrl = userInfo.ct_url || userInfo.serverUrl
     
     // 保存到localStorage
     localStorage.setItem('auth_token', authToken)
     localStorage.setItem('user_info', JSON.stringify(userInfo))
+    if (apiBaseUrl) {
+      localStorage.setItem('api_base_url', apiBaseUrl)
+    } else {
+      localStorage.removeItem('api_base_url')
+    }
     
     // 设置HTTP客户端token
     http.setToken(authToken)
+    if (apiBaseUrl) {
+      http.setBaseURL(apiBaseUrl)
+    }
   }
 
   // 登出
@@ -54,6 +65,7 @@ export const useAuthStore = defineStore('auth', () => {
     // 清除localStorage
     localStorage.removeItem('auth_token')
     localStorage.removeItem('user_info')
+    localStorage.removeItem('api_base_url')
 
     // 清除HTTP客户端token
     http.clearToken()
@@ -124,12 +136,16 @@ export const useAuthStore = defineStore('auth', () => {
   const restoreFromStorage = async () => {
     const savedToken = localStorage.getItem('auth_token')
     const savedUser = localStorage.getItem('user_info')
+    const savedApiBaseUrl = localStorage.getItem('api_base_url')
 
     if (savedToken && savedUser) {
       try {
         token.value = savedToken
         user.value = JSON.parse(savedUser)
         http.setToken(savedToken)
+        if (savedApiBaseUrl) {
+          http.setBaseURL(savedApiBaseUrl)
+        }
         return true
       } catch (error) {
         console.error('Failed to restore auth state:', error)

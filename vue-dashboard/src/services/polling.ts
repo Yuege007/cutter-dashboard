@@ -1,6 +1,12 @@
 import { useDataStore } from '@/stores/data'
 import { useCardStore } from '@/stores/card'
-import api from './api'
+import cutterApi from './cutterApi'
+import cutterAdapter from '@/adapters/cutterAdapter'
+
+const formatDateTime = (date: Date) => {
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+}
 
 // 轮询任务接口
 interface PollingTask {
@@ -197,6 +203,17 @@ class PollingService {
     }
   }
 
+  // 登录态恢复后重新启用任务，避免登录前未授权错误导致任务被禁用
+  prepareTasksForStart(ids: string[]) {
+    ids.forEach(id => {
+      const task = this.tasks.get(id)
+      if (task) {
+        task.enabled = true
+        task.errorCount = 0
+      }
+    })
+  }
+
   // 清理所有任务
   clear() {
     this.stop()
@@ -207,159 +224,214 @@ class PollingService {
 // 创建全局轮询服务实例
 export const pollingService = new PollingService()
 
+export const cutterPollingTaskIds = [
+  'cutter-cabinets',
+  'cutter-materials',
+  'cutter-inventory-warnings',
+  'cutter-item-warnings',
+  'cutter-cargo-inventory',
+  'cutter-inventory-overview',
+  'cutter-borrow-records',
+  'cutter-return-records',
+  'cutter-stock-changes',
+  'cutter-violation-records'
+]
+
+let defaultPollingTasksReady = false
+
 // 预定义的轮询任务
 export const setupDefaultPollingTasks = () => {
-  // 工具柜状态轮询
+  if (defaultPollingTasksReady) return
+  defaultPollingTasksReady = true
+
+  // 刀具柜柜体列表轮询
   pollingService.addTask(
-    'cabinet-status',
-    () => api.cabinet.getCabinets(1, 100),
-    30000 // 30秒
+    'cutter-cabinets',
+    async () => {
+      const response = await cutterApi.cabinet.getCabinets()
+      return {
+        ...response,
+        data: cutterAdapter.getRows(response.data).map(cutterAdapter.mapCutterCabinet)
+      }
+    },
+    1800000 // 30分钟
   )
 
-  // 预警物料轮询
+  // 刀具库存轮询
   pollingService.addTask(
-    'warn-materials',
-    () => api.material.getWarnMaterials(1, 100),
+    'cutter-materials',
+    async () => {
+      const response = await cutterApi.material.getMaterials()
+      return {
+        ...response,
+        data: cutterAdapter.getRows(response.data).map(cutterAdapter.mapCutterMaterial)
+      }
+    },
+    120000 // 2分钟
+  )
+
+  // 耗材库存预警轮询
+  pollingService.addTask(
+    'cutter-inventory-warnings',
+    async () => {
+      const response = await cutterApi.material.getInventoryWarnings({ page: 1, rows: 100 })
+      return {
+        ...response,
+        data: cutterAdapter.getRows(response.data).map(cutterAdapter.mapMaterialWarning)
+      }
+    },
     60000 // 1分钟
   )
 
-  // 今日领用记录轮询
+  // 货道库存预警轮询
   pollingService.addTask(
-    'today-pickups',
-    () => {
-      const today = new Date()
-      const startTime = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')} 00:00:00`
-      const endTime = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')} 23:59:59`
-      return api.pickup.getPickupsByBorrowTime(startTime, endTime, 1, 100)
-    },
-    45000 // 45秒
-  )
-
-  // 今日归还记录轮询
-  pollingService.addTask(
-    'today-returns',
-    () => {
-      const today = new Date()
-      const startTime = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')} 00:00:00`
-      const endTime = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')} 23:59:59`
-      return api.pickup.getPickupsByReturnTime(startTime, endTime, 1, 100)
-    },
-    45000 // 45秒
-  )
-
-  // 最近7天领用记录轮询（Rolling 7 days）
-  pollingService.addTask(
-    'week-pickups',
-    () => {
-      const today = new Date()
-      const start = new Date(today)
-      start.setDate(today.getDate() - 6)
-      start.setHours(0, 0, 0, 0)
-      const end = new Date(today)
-      end.setHours(23, 59, 59, 999)
-
-      const startTime = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')} 00:00:00`
-      const endTime = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')} 23:59:59`
-      return api.pickup.getPickupsByBorrowTime(startTime, endTime, 1, 100)
-    },
-    120000 // 2分钟
-  )
-
-  // 最近15天领用记录轮询
-  pollingService.addTask(
-    '15days-pickups',
-    () => {
-      const today = new Date()
-      const start = new Date(today)
-      start.setDate(today.getDate() - 14)
-      start.setHours(0, 0, 0, 0)
-      const end = new Date(today)
-      end.setHours(23, 59, 59, 999)
-
-      const startTime = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')} 00:00:00`
-      const endTime = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')} 23:59:59`
-      return api.pickup.getPickupsByBorrowTime(startTime, endTime, 1, 500)
-    },
-    180000 // 3分钟
-  )
-
-  // 最近30天领用记录轮询
-  pollingService.addTask(
-    '30days-pickups',
-    () => {
-      const today = new Date()
-      const start = new Date(today)
-      start.setDate(today.getDate() - 29)
-      start.setHours(0, 0, 0, 0)
-      const end = new Date(today)
-      end.setHours(23, 59, 59, 999)
-
-      const startTime = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')} 00:00:00`
-      const endTime = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')} 23:59:59`
-      return api.pickup.getPickupsByBorrowTime(startTime, endTime, 1, 500)
-    },
-    300000 // 5分钟
-  )
-
-  // 本周归还记录轮询（周一到周日）
-  pollingService.addTask(
-    'week-returns',
-    () => {
-      const today = new Date()
-      const dayOfWeek = today.getDay()
-      const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
-      const monday = new Date(today)
-      monday.setDate(today.getDate() + mondayOffset)
-      monday.setHours(0, 0, 0, 0)
-
-      const sunday = new Date(monday)
-      sunday.setDate(monday.getDate() + 6)
-      sunday.setHours(23, 59, 59, 999)
-
-      const startTime = `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, '0')}-${String(monday.getDate()).padStart(2, '0')} 00:00:00`
-      const endTime = `${sunday.getFullYear()}-${String(sunday.getMonth() + 1).padStart(2, '0')}-${String(sunday.getDate()).padStart(2, '0')} 23:59:59`
-      return api.pickup.getPickupsByReturnTime(startTime, endTime, 1, 100)
-    },
-    120000 // 2分钟
-  )
-
-  // 项目状态轮询
-  pollingService.addTask(
-    'project-status',
-    () => api.project.getProjects(1, 100, { projectState: 0 }),
-    120000 // 2分钟
-  )
-
-  // 用户状态轮询
-  pollingService.addTask(
-    'user-status',
-    () => api.user.getUsers(1, 100),
-    300000 // 5分钟
-  )
-
-  // 物料总览轮询（分页聚合）
-  pollingService.addTask(
-    'materials-overview',
+    'cutter-item-warnings',
     async () => {
-      const pageSize = 100
-      let page = 1
-      const allRows: any[] = []
-
-      while (true) {
-        const resp = await api.material.getMaterials(page, pageSize)
-        const rows = resp.data?.rows || []
-        if (!rows.length) break
-        allRows.push(...rows)
-        if (rows.length < pageSize) break
-        page++
-        // 防止无限循环，最多抓取2000条
-        if (page > 20) break
+      const response = await cutterApi.getAllItemWarnings()
+      return {
+        ...response,
+        data: cutterAdapter.getRows(response.data).map(cutterAdapter.mapItemWarning)
       }
+    },
+    60000 // 1分钟
+  )
 
-      return { data: { rows: allRows, total: allRows.length } }
+  // 货道库存轮询
+  pollingService.addTask(
+    'cutter-cargo-inventory',
+    async () => {
+      const response = await cutterApi.getAllCargoInventories()
+      return {
+        ...response,
+        data: cutterAdapter.getRows(response.data).map(cutterAdapter.mapCutterCargoSlot)
+      }
+    },
+    1800000 // 30分钟
+  )
+
+  // 库存总览聚合轮询
+  pollingService.addTask(
+    'cutter-inventory-overview',
+    async () => {
+      const [materialsResponse, warningsResponse] = await Promise.all([
+        cutterApi.material.getMaterials(),
+        cutterApi.material.getInventoryWarnings({ page: 1, rows: 100 })
+      ])
+      const materials = cutterAdapter.getRows(materialsResponse.data).map(cutterAdapter.mapCutterMaterial)
+      const warnings = cutterAdapter.getRows(warningsResponse.data).map(cutterAdapter.mapMaterialWarning)
+
+      return {
+        ...materialsResponse,
+        data: cutterAdapter.buildInventoryOverview(materials, warnings)
+      }
     },
     120000 // 2分钟
   )
+
+  pollingService.addTask(
+    'cutter-borrow-records',
+    async () => {
+      const endDate = new Date()
+      const startDate = new Date(endDate)
+      startDate.setDate(startDate.getDate() - 14)
+      startDate.setHours(0, 0, 0, 0)
+
+      const response = await cutterApi.borrow.getBorrowRecords({
+        startTime: formatDateTime(startDate),
+        endTime: formatDateTime(endDate),
+        page: 1,
+        rows: 100
+      })
+
+      return {
+        ...response,
+        data: cutterAdapter.getRows(response.data).map(cutterAdapter.mapBorrowRecord)
+      }
+    },
+    120000
+  )
+
+  pollingService.addTask(
+    'cutter-return-records',
+    async () => {
+      const endDate = new Date()
+      const startDate = new Date(endDate)
+      startDate.setDate(startDate.getDate() - 6)
+      startDate.setHours(0, 0, 0, 0)
+
+      const response = await cutterApi.borrow.getReturnRecords({
+        startTime: formatDateTime(startDate),
+        endTime: formatDateTime(endDate),
+        page: 1,
+        rows: 100
+      })
+
+      return {
+        ...response,
+        data: cutterAdapter.getRows(response.data).map(cutterAdapter.mapBorrowRecord)
+      }
+    },
+    120000
+  )
+
+  pollingService.addTask(
+    'cutter-stock-changes',
+    async () => {
+      const endDate = new Date()
+      const startDate = new Date(endDate)
+      startDate.setDate(startDate.getDate() - 6)
+      startDate.setHours(0, 0, 0, 0)
+
+      const response = await cutterApi.stock.getStockChanges({
+        startTime: formatDateTime(startDate),
+        endTime: formatDateTime(endDate),
+        page: 1,
+        rows: 100
+      })
+
+      return {
+        ...response,
+        data: cutterAdapter.getRows(response.data).map(cutterAdapter.mapStockChangeRecord)
+      }
+    },
+    120000
+  )
+
+  pollingService.addTask(
+    'cutter-violation-records',
+    async () => {
+      const endDate = new Date()
+      const startDate = new Date(endDate)
+      startDate.setDate(startDate.getDate() - 6)
+      startDate.setHours(0, 0, 0, 0)
+
+      const response = await cutterApi.violation.getViolationRecords({
+        startTime: formatDateTime(startDate),
+        endTime: formatDateTime(endDate),
+        page: 1,
+        rows: 100
+      })
+
+      return {
+        ...response,
+        data: cutterAdapter.getRows(response.data).map(cutterAdapter.mapBorrowRecord)
+      }
+    },
+    120000
+  )
+}
+
+export const startDefaultPollingTasks = () => {
+  setupDefaultPollingTasks()
+
+  const dataStore = useDataStore()
+  cutterPollingTaskIds.forEach(id => {
+    dataStore.clearError(id)
+    dataStore.setLoading(id, false)
+  })
+
+  pollingService.prepareTasksForStart(cutterPollingTaskIds)
+  pollingService.start()
 }
 
 // 根据卡片需求动态添加轮询任务

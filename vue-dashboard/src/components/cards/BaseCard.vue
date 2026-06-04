@@ -15,12 +15,8 @@
     <div class="drag-zone">
     <!-- 卡片头部：标题 + 工具栏 -->
     <div class="card-header">
-      <!-- 左侧：图标 + 标题 -->
+      <!-- 左侧：标题 -->
       <div class="card-title-section">
-        <div class="card-icon" v-if="icon">
-          <component :is="icon" v-if="typeof icon === 'object'" />
-          <span v-else>{{ icon }}</span>
-        </div>
         <h3 class="card-title">{{ title }}</h3>
       </div>
 
@@ -404,12 +400,6 @@ const handleRetry = () => {
   @apply flex items-center space-x-2 flex-1 min-w-0;
 }
 
-.card-icon {
-  @apply flex items-center justify-center w-5 h-5 flex-shrink-0;
-  font-size: 20px;
-  color: #007aff;
-}
-
 .card-title {
   @apply text-base font-semibold truncate;
   color: #1d1d1f;
@@ -547,11 +537,6 @@ const handleRetry = () => {
 .theme-dark .card-title,
 .theme-tech .card-title {
   color: var(--color-text);
-}
-
-.theme-dark .card-icon,
-.theme-tech .card-icon {
-  color: var(--color-primary);
 }
 
 .theme-dark .toolbar-btn,

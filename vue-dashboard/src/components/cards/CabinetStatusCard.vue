@@ -1,792 +1,972 @@
 <template>
   <BaseCard
-    :card-id="cardId"
-    :title="cardTitle"
-    :mode="mode"
+    :title="title"
+    variant="success"
+    :mode="displayMode"
+    :width="width"
+    :height="height"
+    :min-width="minWidth"
+    :min-height="minHeight"
     :loading="loading"
-    :error="error"
-    :mode-locked="props.modeLocked"
-    :forced-mode="props.forcedMode"
+    :has-error="!!error"
+    :error-message="error"
+    :show-settings="showSettings"
+    :show-refresh="showRefresh"
+    :locked="locked"
+    :is-dragging="isDragging"
+    :mode-locked="modeLocked"
     @refresh="handleRefresh"
-    @settings="handleSettings"
+    @settings="$emit('settings')"
+    @delete="$emit('delete')"
+    @lock="value => $emit('lock', value)"
+    @mode-lock="(locked, mode) => $emit('modeLock', locked, mode)"
   >
-    <!-- Mini 视图 (1x1 ~ 2x2) -->
-    <template v-if="mode === 'mini'">
-      <div class="mini-view">
-        <div class="status-summary">
-          <div class="status-item online">
-            <div class="status-count">{{ onlineCount }}</div>
-            <div class="status-label">在线</div>
-          </div>
-          <div class="status-divider"></div>
-          <div class="status-item offline">
-            <div class="status-count">{{ offlineCount }}</div>
-            <div class="status-label">离线</div>
-          </div>
-        </div>
-      </div>
-    </template>
+    <template #default>
+      <div class="cabinet-card" :class="`mode-${displayMode}`">
+        <section v-if="displayMode === 'mini'" class="mini-panel">
+          <span class="mini-label">货道风险</span>
+          <strong>{{ warningSlotCount }}</strong>
+          <small>{{ emptySlotCount }} 空货道 · {{ cabinets.length }} 台刀柜</small>
+        </section>
 
-    <!-- Compact 视图 (3x2 ~ 4x3) -->
-    <template v-else-if="mode === 'compact'">
-      <div class="compact-view">
-        <div class="compact-header">
-          <h3 class="compact-title">柜体状态列表</h3>
-          <div class="compact-summary">
-            <span class="online-count">在线: {{ onlineCount }}</span>
-            <span class="offline-count">离线: {{ offlineCount }}</span>
-          </div>
-        </div>
-        <div class="cabinet-list">
-          <div
-            v-for="cabinet in displayCabinets"
-            :key="cabinet.id"
-            class="cabinet-item"
-          >
-            <div class="status-indicator" :class="{ 'online': cabinet.isOnline === '1', 'offline': cabinet.isOnline !== '1' }">
-              <div class="status-dot"></div>
+        <template v-else>
+          <section class="health-strip">
+            <div class="health-metric">
+              <span>刀柜</span>
+              <strong>{{ cabinets.length }}</strong>
             </div>
-            <div class="cabinet-info">
-              <div class="cabinet-name">{{ cabinet.cuttingName }}</div>
-              <div class="cabinet-code">{{ cabinet.cuttingNo }}</div>
+            <div class="health-metric ok">
+              <span>正常</span>
+              <strong>{{ normalSlotCount }}</strong>
             </div>
-            <div class="last-seen" v-if="(cabinet as any).lastHeartbeat">
-              {{ formatLastSeen((cabinet as any).lastHeartbeat) }}
+            <div class="health-metric warn">
+              <span>预警</span>
+              <strong>{{ warningSlotCount }}</strong>
             </div>
-          </div>
-          <div v-if="cabinets.length === 0" class="empty-state">
-            <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-              <circle cx="9" cy="9" r="2"/>
-              <path d="M21 15.5c-.3-2.5-2.8-4.5-5.5-4.5s-5.2 2-5.5 4.5"/>
-            </svg>
-            <span>暂无柜体数据</span>
-          </div>
-        </div>
-      </div>
-    </template>
+            <div class="health-metric danger">
+              <span>空货道</span>
+              <strong>{{ emptySlotCount }}</strong>
+            </div>
+          </section>
 
-    <!-- Full 视图 (≥4x3) -->
-    <template v-else>
-      <div class="full-view">
-        <div class="full-header">
-          <div class="cabinet-selector">
-            <select v-model="selectedCabinetNo" @change="loadCabinetSlots" class="cabinet-select">
-              <option value="">选择柜体</option>
-              <option v-for="cabinet in cabinets" :key="cabinet.id" :value="cabinet.cuttingNo">
-                {{ cabinet.cuttingName }} ({{ cabinet.cuttingNo }})
-              </option>
-            </select>
+          <div class="health-bar" aria-hidden="true">
+            <span class="bar-ok" :style="{ flexGrow: Math.max(normalSlotCount, 0) }"></span>
+            <span class="bar-warn" :style="{ flexGrow: Math.max(warningSlotCount, 0) }"></span>
+            <span class="bar-empty" :style="{ flexGrow: Math.max(emptySlotCount, 0) }"></span>
+            <span v-if="totalSlotCount === 0" class="bar-empty-state"></span>
           </div>
-        </div>
-        
-        <div class="slots-container" v-if="selectedCabinetNo">
-          <VirtualGrid
-            v-if="cabinetSlots.length > 0"
-            :items="cabinetSlots"
-            :item-width="120"
-            :item-height="100"
-            :container-height="400"
-            :buffer-size="3"
-            :gap="12"
-            key-field="id"
-            class="slots-virtual-grid"
-          >
-            <template #default="{ item: slot }">
-              <div
-                class="slot-item"
-                :class="getSlotStatusClass(slot)"
-                :title="getSlotTooltip(slot)"
+
+          <section v-if="displayMode === 'compact'" class="compact-panel">
+            <div class="risk-list">
+              <article
+                v-for="cabinet in cabinetRiskTop.slice(0, 3)"
+                :key="cabinet.cuttingNo"
+                class="risk-row"
+                :class="cabinet.level"
               >
-                <!-- 货道号 - 最显眼 -->
-                <div class="slot-number">
-                  {{ slot.itemNoAlias || slot.itmeNo }}
+                <i></i>
+                <div>
+                  <strong>{{ cabinet.name }}</strong>
+                  <span>{{ cabinet.total }} 货道 · {{ cabinet.warning }} 预警 · {{ cabinet.empty }} 空</span>
+                </div>
+                <b>{{ cabinet.riskScore }}</b>
+              </article>
+            </div>
+
+            <div class="priority-line" :class="{ stable: prioritySlots.length === 0 }">
+              <span>{{ prioritySlots.length > 0 ? '优先处理' : '当前状态' }}</span>
+              <strong>{{ priorityText }}</strong>
+            </div>
+          </section>
+
+          <section v-else class="full-panel">
+            <div class="full-tabs">
+              <button :class="{ active: fullView === 'risk' }" @click="fullView = 'risk'">
+                风险视图
+              </button>
+              <button :class="{ active: fullView === 'cabinet' }" @click="fullView = 'cabinet'">
+                单柜货道
+              </button>
+            </div>
+
+            <div v-if="isDragging" class="drag-snapshot">
+              <strong>{{ selectedCabinetSummary?.name || '刀柜状态' }}</strong>
+              <span>{{ totalSlotCount }} 个货道 · {{ warningSlotCount }} 个预警 · {{ emptySlotCount }} 个空货道</span>
+            </div>
+
+            <div v-else-if="fullView === 'risk'" class="risk-view">
+              <section class="priority-board">
+                <div class="section-title">
+                  <strong>优先处理货道</strong>
+                  <span>按断供、低库存和缺口排序</span>
                 </div>
 
-                <!-- 内容区域 -->
-                <div class="slot-body">
-                  <!-- 有物料状态 -->
-                  <div v-if="slot.boxInfoVo && slot.boxInfoVo.productName" class="material-content">
-                    <!-- 物料名称 -->
-                    <div class="material-name">{{ slot.boxInfoVo.productName }}</div>
+                <div class="priority-grid">
+                  <article
+                    v-for="slot in prioritySlots.slice(0, 8)"
+                    :key="getSlotKey(slot)"
+                    class="priority-card"
+                    :class="getSlotLevel(slot)"
+                    @click="openCabinet(slot.cuttingNo)"
+                  >
+                    <div class="priority-head">
+                      <strong>{{ slot.itemNoAlias || slot.itemNo || '-' }}</strong>
+                      <span>{{ getSlotLevelLabel(slot) }}</span>
+                    </div>
+                    <p>{{ slot.productName || '未绑定刀具' }}</p>
+                    <footer>
+                      <span>{{ slot.cuttingName || slot.cuttingNo || '未知刀柜' }}</span>
+                      <b>{{ getInventory(slot) }}/{{ slot.warnValue || slot.bindNum || '-' }}</b>
+                    </footer>
+                  </article>
+                </div>
 
-                    <!-- 库存信息 -->
-                    <div class="inventory-section">
-                      <div class="inventory-text">{{ slot.surplus }}/{{ slot.inventory }}</div>
-                      <div class="progress-container">
-                        <div
-                          class="progress-bar"
-                          :class="getProgressBarClass(slot)"
-                          :style="{ width: getProgressPercentage(slot) + '%' }"
-                        ></div>
+                <div v-if="prioritySlots.length === 0" class="empty-state">
+                  当前没有需要优先处理的货道
+                </div>
+              </section>
+
+              <section class="cabinet-risk-board">
+                <div class="section-title">
+                  <strong>柜体风险分布</strong>
+                  <span>点击柜体查看单柜货道</span>
+                </div>
+
+                <div class="cabinet-risk-list custom-scrollbar">
+                  <button
+                    v-for="cabinet in cabinetRiskTop"
+                    :key="cabinet.cuttingNo"
+                    class="cabinet-risk-row"
+                    :class="cabinet.level"
+                    @click="openCabinet(cabinet.cuttingNo)"
+                  >
+                    <i></i>
+                    <div class="cabinet-risk-main">
+                      <strong>{{ cabinet.name }}</strong>
+                      <span>{{ cabinet.total }} 货道 · {{ cabinet.warning }} 预警 · {{ cabinet.empty }} 空</span>
+                      <div class="cabinet-risk-bar">
+                        <em class="ok" :style="{ width: `${cabinet.okRatio}%` }"></em>
+                        <em class="warn" :style="{ width: `${cabinet.warnRatio}%` }"></em>
+                        <em class="empty" :style="{ width: `${cabinet.emptyRatio}%` }"></em>
                       </div>
                     </div>
-                  </div>
+                    <b>{{ cabinet.riskScore }}</b>
+                  </button>
+                </div>
+              </section>
+            </div>
 
-                  <!-- 空状态 -->
-                  <div v-else class="empty-content">
-                    <div class="empty-icon">📦</div>
-                    <div class="empty-text">空</div>
+            <div v-else class="cabinet-view">
+              <aside class="cabinet-selector custom-scrollbar">
+                <button
+                  v-for="cabinet in cabinetSummaries"
+                  :key="cabinet.cuttingNo"
+                  :class="{ active: selectedCabinetNo === cabinet.cuttingNo }"
+                  @click="selectCabinet(cabinet.cuttingNo)"
+                >
+                  <i :class="cabinet.level"></i>
+                  <div>
+                    <b>{{ cabinet.name }}</b>
+                    <span>{{ cabinet.total }} 货道 · {{ cabinet.warning }} 预警</span>
+                  </div>
+                </button>
+              </aside>
+
+              <section class="single-cabinet">
+                <div class="cabinet-toolbar">
+                  <div>
+                    <strong>{{ selectedCabinetSummary?.name || selectedCabinetNo || '未选择刀柜' }}</strong>
+                    <span>{{ selectedSlots.length }} 货道 · 第 {{ currentSlotPage + 1 }} / {{ slotPageCount }} 页</span>
+                  </div>
+                  <div class="pager">
+                    <button :disabled="currentSlotPage <= 0" @click="currentSlotPage -= 1">上一页</button>
+                    <button :disabled="currentSlotPage >= slotPageCount - 1" @click="currentSlotPage += 1">下一页</button>
                   </div>
                 </div>
-              </div>
-            </template>
-          </VirtualGrid>
-          
-          <div v-if="cabinetSlots.length === 0" class="empty-state">
-            <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-              <circle cx="9" cy="9" r="2"/>
-              <path d="M21 15.5c-.3-2.5-2.8-4.5-5.5-4.5s-5.2 2-5.5 4.5"/>
-            </svg>
-            <span>该柜体暂无货道数据</span>
-          </div>
-        </div>
-        
-        <div v-else class="no-selection">
-          <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-            <circle cx="9" cy="9" r="2"/>
-            <path d="M21 15.5c-.3-2.5-2.8-4.5-5.5-4.5s-5.2 2-5.5 4.5"/>
-          </svg>
-          <span>请选择要查看的柜体</span>
-        </div>
+
+                <div class="slot-grid custom-scrollbar">
+                  <article
+                    v-for="slot in pagedSelectedSlots"
+                    :key="getSlotKey(slot)"
+                    class="slot"
+                    :class="getSlotLevel(slot)"
+                    :title="`${slot.itemNoAlias || slot.itemNo}: ${slot.productName || '未绑定刀具'}`"
+                  >
+                    <span>{{ slot.itemNoAlias || slot.itemNo || '-' }}</span>
+                    <b>{{ getInventory(slot) }}</b>
+                    <small>{{ slot.productName || '未绑定' }}</small>
+                  </article>
+
+                  <div v-if="selectedSlots.length === 0" class="empty-state">
+                    暂无货道库存数据
+                  </div>
+                </div>
+              </section>
+            </div>
+          </section>
+        </template>
       </div>
     </template>
   </BaseCard>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { computed, ref, watch } from 'vue'
 import BaseCard from './BaseCard.vue'
-import VirtualGrid from '@/components/common/VirtualGrid.vue'
-import { api } from '@/services/api'
 import { useDataStore } from '@/stores/data'
-import type { BaseCardProps, BaseCardEmits } from '@/types/card'
-import type { Cabinet } from '@/types'
-import { useBaseCard } from '@/composables/useBaseCard'
+import { pollingService } from '@/services/polling'
+import { detectCardMode } from '@/utils/cardSizeManager'
+import type { CardMode } from '@/types'
+import type { CutterCabinet, CutterCargoSlot } from '@/types/cutter'
 
-// Props和Events使用统一接口
-const props = defineProps<BaseCardProps>()
-const emit = defineEmits<BaseCardEmits>()
-
-// 使用统一的卡片Hook，明确类型
-const {
-  mode,
-  isMini,
-  isCompact,
-  isFull,
-  loading,
-  error,
-  data: cabinets,
-  refresh,
-  cardTitle
-} = useBaseCard(props, emit, {
-  fetcher: () => api.cabinet.getCabinets(1, 100).then(res => res.data?.rows || []),
-  titles: {
-    mini: '库存',
-    compact: '柜体监控',
-    full: '智能柜详情',
-    default: '柜体状态'
-  }
+const props = withDefaults(defineProps<{
+  title?: string
+  width?: number
+  height?: number
+  minWidth?: number
+  minHeight?: number
+  forcedMode?: CardMode
+  modeLocked?: boolean
+  showRefresh?: boolean
+  showSettings?: boolean
+  locked?: boolean
+  isDragging?: boolean
+}>(), {
+  title: '刀柜货道状态',
+  width: 4,
+  height: 3,
+  minWidth: 2,
+  minHeight: 2,
+  showRefresh: true,
+  showSettings: true,
+  locked: false,
+  isDragging: false
 })
 
-// 卡片特有的响应式数据
-const cabinetSlots = ref<any[]>([])
-const selectedCabinetNo = ref('')
+defineEmits<{
+  refresh: []
+  settings: []
+  delete: []
+  lock: [locked: boolean]
+  modeLock: [locked: boolean, mode: CardMode]
+}>()
 
-const onlineCount = computed(() => {
-  if (!cabinets.value || !Array.isArray(cabinets.value)) return 0
-  return (cabinets.value as Cabinet[]).filter(cabinet => cabinet.isOnline === '1').length
-})
+type FullView = 'risk' | 'cabinet'
+type RiskLevel = 'normal' | 'warning' | 'empty'
 
-const offlineCount = computed(() => {
-  if (!cabinets.value || !Array.isArray(cabinets.value)) return 0
-  return (cabinets.value as Cabinet[]).filter(cabinet => cabinet.isOnline !== '1').length
-})
+interface CabinetSummary {
+  cuttingNo: string
+  name: string
+  total: number
+  normal: number
+  warning: number
+  empty: number
+  riskScore: number
+  level: RiskLevel
+  okRatio: number
+  warnRatio: number
+  emptyRatio: number
+}
 
-const displayCabinets = computed(() => {
-  if (!cabinets.value || !Array.isArray(cabinets.value)) return []
-  // Compact模式下优先显示在线柜体，然后是离线柜体，最多显示8个
-  const cabinetList = cabinets.value as Cabinet[]
-  const onlineCabinets = cabinetList.filter(c => c.isOnline === '1')
-  const offlineCabinets = cabinetList.filter(c => c.isOnline !== '1')
-  const sortedCabinets = [...onlineCabinets, ...offlineCabinets]
-  return sortedCabinets.slice(0, 8)
-})
-
-const selectedCabinetName = computed(() => {
-  if (!cabinets.value || !Array.isArray(cabinets.value)) return ''
-  const cabinet = (cabinets.value as Cabinet[]).find(c => c.cuttingNo === selectedCabinetNo.value)
-  return cabinet?.cuttingName || ''
-})
-
-// 订阅轮询数据：cabinet-status
 const dataStore = useDataStore()
-watch(
-  () => dataStore.getData('cabinet-status'),
-  (payload) => {
-    const rows = (payload as any)?.rows || []
-    // 同步到卡片数据
-    cabinets.value = rows as Cabinet[]
-  },
-  { immediate: true }
-)
+const selectedCabinetNo = ref('')
+const fullView = ref<FullView>('risk')
+const currentSlotPage = ref(0)
+const slotPageSize = 42
 
-// 监听柜体数据变化，自动选择第一个在线柜体
-watch([cabinets, mode], ([newCabinets, newMode]) => {
-  // 添加更多安全检查
-  if (!newCabinets || !Array.isArray(newCabinets) || newCabinets.length === 0) return
-  if (newMode !== 'full') return
-  if (selectedCabinetNo.value) return // 已经有选中的柜体
+const displayMode = computed(() => props.forcedMode || detectCardMode(props.width, props.height))
 
-  // 使用nextTick确保组件已完全渲染
-  nextTick(() => {
-    try {
-      // 优先选择在线柜体，如果没有在线的就选择第一个
-      const onlineCabinet = newCabinets.find(c => c && c.isOnline === '1')
-      const targetCabinet = onlineCabinet || newCabinets[0]
+const cabinets = computed<CutterCabinet[]>(() => dataStore.getData('cutter-cabinets') || [])
+const slots = computed<CutterCargoSlot[]>(() => dataStore.getData('cutter-cargo-inventory') || [])
 
-      if (targetCabinet && targetCabinet.cuttingNo) {
-        selectedCabinetNo.value = targetCabinet.cuttingNo
-        loadCabinetSlots()
-      }
-    } catch (err) {
-      console.error('Error in cabinet auto-selection:', err)
+const slotsByCabinet = computed(() => {
+  const grouped = new Map<string, CutterCargoSlot[]>()
+
+  for (const slot of slots.value) {
+    const cabinetNo = slot.cuttingNo || (cabinets.value.length <= 1 ? cabinets.value[0]?.cuttingNo || '' : '')
+    const list = grouped.get(cabinetNo) || []
+    list.push(slot)
+    grouped.set(cabinetNo, list)
+  }
+
+  grouped.forEach(list => {
+    list.sort((a, b) =>
+      (a.itemNoAlias || a.itemNo).localeCompare(b.itemNoAlias || b.itemNo, 'zh-CN', { numeric: true })
+    )
+  })
+
+  return grouped
+})
+
+const cabinetSummaries = computed<CabinetSummary[]>(() => {
+  const knownCabinets = cabinets.value.length
+    ? cabinets.value
+    : Array.from(slotsByCabinet.value.keys()).map(cuttingNo => ({ cuttingNo, cuttingName: cuttingNo }))
+
+  return knownCabinets.map(cabinet => {
+    const cabinetSlots = slotsByCabinet.value.get(cabinet.cuttingNo) || []
+    const empty = cabinetSlots.filter(slot => getSlotLevel(slot) === 'empty').length
+    const warning = cabinetSlots.filter(slot => getSlotLevel(slot) === 'warning').length
+    const normal = cabinetSlots.filter(slot => getSlotLevel(slot) === 'normal').length
+    const total = cabinetSlots.length
+    const riskScore = empty * 3 + warning * 2
+    const level: RiskLevel = empty > 0 ? 'empty' : warning > 0 ? 'warning' : 'normal'
+    const denominator = Math.max(total, 1)
+
+    return {
+      cuttingNo: cabinet.cuttingNo,
+      name: cabinet.cuttingName || cabinet.cuttingNo,
+      total,
+      normal,
+      warning,
+      empty,
+      riskScore,
+      level,
+      okRatio: Math.round((normal / denominator) * 100),
+      warnRatio: Math.round((warning / denominator) * 100),
+      emptyRatio: Math.round((empty / denominator) * 100)
     }
   })
-}, { flush: 'post' })
+})
 
-// 方法
-const formatLastSeen = (timestamp: string) => {
-  if (!timestamp) return ''
-  const date = new Date(timestamp)
-  const now = new Date()
-  const diff = now.getTime() - date.getTime()
-  const minutes = Math.floor(diff / (1000 * 60))
-  
-  if (minutes < 1) return '刚刚'
-  if (minutes < 60) return `${minutes}分钟前`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}小时前`
-  const days = Math.floor(hours / 24)
-  return `${days}天前`
-}
+const cabinetRiskTop = computed(() =>
+  [...cabinetSummaries.value].sort((a, b) => b.riskScore - a.riskScore || b.total - a.total)
+)
 
-// 计算库存百分比
-const getProgressPercentage = (slot: any) => {
-  if (!slot.inventory || slot.inventory === 0) return 0
-  return Math.min(100, (slot.surplus / slot.inventory) * 100)
-}
-
-// 获取库存状态
-const getSlotStatus = (slot: any) => {
-  if (!slot.boxInfoVo?.productName || slot.surplus === 0) return 'empty'
-
-  const percentage = getProgressPercentage(slot)
-  if (percentage >= 90) return 'full'      // 满 (>=90%)
-  if (percentage >= 30) return 'normal'    // 正常 (30-89%)
-  return 'low'                             // 低库存 (<30%)
-}
-
-// 获取卡片状态类名
-const getSlotStatusClass = (slot: any) => {
-  const status = getSlotStatus(slot)
-  return `slot-${status}`
-}
-
-// 获取进度条类名
-const getProgressBarClass = (slot: any) => {
-  const status = getSlotStatus(slot)
-  return `progress-${status}`
-}
-
-const getSlotTooltip = (slot: any) => {
-  if (slot.boxInfoVo && slot.boxInfoVo.productName) {
-    const material = slot.boxInfoVo
-    const percentage = getProgressPercentage(slot)
-    return `${material.productName}\n规格: ${material.specification || '未知'}\n品牌: ${material.brandName || '未知'}\n库存: ${slot.surplus}/${slot.inventory} (${percentage.toFixed(1)}%)`
+watch(cabinets, (items) => {
+  if (!selectedCabinetNo.value && items.length > 0) {
+    selectedCabinetNo.value = items[0].cuttingNo
   }
-  return `空货道\n容量: ${slot.inventory}`
+}, { immediate: true })
+
+watch(selectedCabinetNo, () => {
+  currentSlotPage.value = 0
+})
+
+const warningSlots = computed(() =>
+  slots.value.filter(item => getSlotLevel(item) === 'warning')
+)
+
+const prioritySlots = computed(() =>
+  [...slots.value]
+    .filter(item => getSlotLevel(item) === 'empty' || getSlotLevel(item) === 'warning')
+    .sort((a, b) => getSlotPriority(b) - getSlotPriority(a))
+)
+
+const totalSlotCount = computed(() => slots.value.length)
+const emptySlotCount = computed(() => slots.value.filter(item => getSlotLevel(item) === 'empty').length)
+const warningSlotCount = computed(() => warningSlots.value.length)
+const normalSlotCount = computed(() =>
+  slots.value.filter(item => getSlotLevel(item) === 'normal').length
+)
+
+const selectedCabinetSummary = computed(() =>
+  cabinetSummaries.value.find(item => item.cuttingNo === selectedCabinetNo.value)
+)
+
+const selectedSlots = computed(() => slotsByCabinet.value.get(selectedCabinetNo.value) || [])
+const slotPageCount = computed(() => Math.max(1, Math.ceil(selectedSlots.value.length / slotPageSize)))
+const pagedSelectedSlots = computed(() => {
+  const start = currentSlotPage.value * slotPageSize
+  return selectedSlots.value.slice(start, start + slotPageSize)
+})
+
+const priorityText = computed(() => {
+  if (prioritySlots.value.length === 0) return '当前货道状态稳定'
+  return prioritySlots.value
+    .slice(0, 3)
+    .map(slot => slot.itemNoAlias || slot.itemNo || slot.cuttingName || '未知货道')
+    .join('、')
+})
+
+const loading = computed(() =>
+  dataStore.isLoading('cutter-cabinets') ||
+  dataStore.isLoading('cutter-cargo-inventory')
+)
+const error = computed(() =>
+  dataStore.getError('cutter-cabinets') ||
+  dataStore.getError('cutter-cargo-inventory') ||
+  ''
+)
+
+function getInventory(slot: CutterCargoSlot) {
+  return Number(slot.inventory ?? slot.surplus ?? 0)
 }
 
-
-
-const loadCabinetSlots = async () => {
-  if (!selectedCabinetNo.value) {
-    cabinetSlots.value = []
-    return
-  }
-
-  try {
-    const response = await api.cabinet.getCabinetSlots(selectedCabinetNo.value)
-
-    if (response.code === 'OK' && response.data) {
-      // 处理两种可能的数据结构
-      let slots: any[] = []
-      if (Array.isArray(response.data)) {
-        // 直接是数组
-        slots = response.data
-      } else if (response.data.itemList && Array.isArray(response.data.itemList)) {
-        // 嵌套在itemList中
-        slots = response.data.itemList
-      }
-
-      cabinetSlots.value = slots
-    } else {
-      throw new Error(response.message || '获取货道信息失败')
-    }
-  } catch (err: any) {
-    // 只在组件仍然挂载时才emit错误
-    if (emit) {
-      emit('error', err.message || '网络错误')
-    }
-    console.error('Failed to fetch cabinet slots:', err)
-    cabinetSlots.value = []
-  }
+function getSlotLevel(slot: CutterCargoSlot): 'normal' | 'warning' | 'empty' | 'disabled' {
+  const inventory = getInventory(slot)
+  if (slot.disabled) return 'disabled'
+  if (slot.empty || inventory <= 0) return 'empty'
+  if (inventory <= slot.warnValue) return 'warning'
+  return 'normal'
 }
 
-const handleRefresh = () => {
-  refresh()
-  if (selectedCabinetNo.value) {
-    loadCabinetSlots()
-  }
-  emit('refresh')
+function getSlotPriority(slot: CutterCargoSlot) {
+  const level = getSlotLevel(slot)
+  const shortage = Math.max(0, Number(slot.warnValue || 0) - getInventory(slot))
+  if (level === 'empty') return 10000 + shortage
+  if (level === 'warning') return 5000 + shortage
+  return shortage
 }
 
-const handleSettings = () => {
-  emit('settings')
+function getSlotLevelLabel(slot: CutterCargoSlot) {
+  const level = getSlotLevel(slot)
+  if (level === 'empty') return '断供'
+  if (level === 'warning') return '低库存'
+  if (level === 'disabled') return '停用'
+  return '正常'
+}
+
+function getSlotKey(slot: CutterCargoSlot) {
+  return `${slot.cuttingNo}-${slot.itemNoAlias}-${slot.itemNo}-${slot.materialCode}`
+}
+
+function selectCabinet(cuttingNo: string) {
+  selectedCabinetNo.value = cuttingNo
+}
+
+function openCabinet(cuttingNo: string) {
+  if (cuttingNo) selectedCabinetNo.value = cuttingNo
+  fullView.value = 'cabinet'
+}
+
+const handleRefresh = async () => {
+  await Promise.all([
+    pollingService.executeTask('cutter-cabinets'),
+    pollingService.executeTask('cutter-cargo-inventory')
+  ])
 }
 </script>
 
 <style scoped>
-/* Mini 视图样式 */
-.mini-view {
-  @apply h-full flex items-center justify-center;
-  padding: 0.75rem;
-  min-height: 0; /* 允许flex收缩 */
-}
-
-.status-summary {
-  @apply flex items-center;
-  gap: clamp(0.5rem, 3vw, 1rem); /* 响应式间距 */
-}
-
-.status-item {
-  @apply text-center flex-shrink-0;
-  min-width: 0; /* 允许内容收缩 */
-}
-
-.status-label {
-  @apply mt-1 leading-tight;
-  color: var(--color-text-secondary);
-  /* 响应式字体大小 */
-  font-size: clamp(0.625rem, 2.5vw, 0.75rem);
-  /* 中文字体优化 */
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-  letter-spacing: 0.02em;
-  /* 防止换行 */
-  white-space: nowrap;
-}
-
-.status-count {
-  @apply font-semibold leading-tight;
-  /* 响应式字体大小 */
-  font-size: clamp(1.25rem, 4vw, 2rem);
-  /* 中文数字字体优化 */
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-  letter-spacing: -0.02em;
-  /* 防止数字换行 */
-  white-space: nowrap;
-}
-
-.status-item.online .status-count {
-  @apply text-green-500;
-}
-
-.status-item.offline .status-count {
-  @apply text-red-500;
-}
-
-.status-divider {
-  @apply flex-shrink-0;
-  background-color: var(--color-text-secondary);
-  opacity: 0.3;
-  width: 1px;
-  height: clamp(2rem, 8vw, 3rem); /* 响应式分隔线高度 */
-}
-
-/* Compact 视图样式 */
-.compact-view {
-  @apply h-full flex flex-col;
-  padding: 1rem;
-}
-
-.compact-header {
-  @apply mb-4 flex justify-between items-center;
-}
-
-.compact-summary {
-  @apply flex space-x-3 text-sm;
-}
-
-.online-count {
-  @apply text-green-500 font-medium;
-}
-
-.offline-count {
-  @apply text-red-500 font-medium;
-}
-
-.compact-title {
-  @apply text-lg font-medium;
-  color: var(--color-text);
-}
-
-.cabinet-list {
-  @apply flex-1 space-y-3 overflow-y-auto custom-scrollbar;
-}
-
-.cabinet-item {
-  @apply flex items-center space-x-3 p-2 rounded-lg transition-colors;
-  opacity: 0.8;
-}
-
-.cabinet-item:hover {
-  background-color: var(--color-surface);
-  opacity: 1;
-  transform: translateY(-1px);
-}
-
-.status-indicator {
-  @apply flex items-center justify-center;
-}
-
-.status-dot {
-  @apply w-3 h-3 rounded-full;
-}
-
-.status-indicator.online .status-dot {
-  @apply bg-green-500;
-}
-
-.status-indicator.offline .status-dot {
-  @apply bg-red-500;
-}
-
-.cabinet-info {
-  @apply flex-1;
-}
-
-.cabinet-name {
-  @apply font-medium text-sm;
-  color: var(--color-text);
-}
-
-.cabinet-code {
-  @apply text-xs mt-1;
-  color: var(--color-text-secondary);
-}
-
-.last-seen {
-  @apply text-xs;
-  color: var(--color-text-secondary);
-}
-
-/* Full 视图样式 */
-.full-view {
-  @apply h-full flex flex-col;
-  padding: 1rem;
-}
-
-.full-header {
-  @apply flex items-center justify-between mb-4;
-}
-
-.cabinet-selector {
-  @apply flex items-center;
-}
-
-.cabinet-select {
-  @apply px-3 py-2 border rounded-lg text-sm;
-  background-color: var(--color-surface);
-  border-color: var(--color-text-secondary);
-  color: var(--color-text);
-  opacity: 0.8;
-}
-
-.cabinet-select:hover {
-  opacity: 1;
-  border-color: var(--color-primary);
-}
-
-.cabinet-select:focus {
-  outline: none;
-  border-color: var(--color-primary);
-  opacity: 1;
-}
-
-.full-title {
-  @apply text-lg font-medium;
-  color: var(--color-text);
-}
-
-.slots-container {
-  @apply flex-1;
-  min-height: 0; /* 确保flex子项可以收缩 */
-}
-
-.slots-virtual-grid {
-  @apply w-full h-full;
-  min-height: 0; /* 确保能够收缩和扩展 */
-}
-
-/* 保留原有的网格样式作为备用 */
-.slots-grid {
-  @apply grid grid-cols-4 gap-3;
-}
-
-/* 货道卡片基础样式 */
-.slot-item {
-  width: 120px;
-  height: 100px;
-  padding: 8px;
-  box-sizing: border-box;
-  border-radius: 12px;
-  display: flex;
-  flex-direction: column;
-  transition: all 0.2s ease;
-  cursor: pointer;
-  position: relative;
-  overflow: hidden;
-}
-
-/* 状态颜色 - 保持固定颜色，只适配边框 */
-.slot-empty {
-  background-color: #f1f5f9;
-  border: 2px solid #94a3b8;
-  opacity: 0.6;
-}
-
-.slot-full {
-  background-color: #dcfce7;
-  border: 2px solid #16a34a;
-  opacity: 0.9;
-  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.2);
-}
-
-.slot-normal {
-  background-color: #dbeafe;
-  border: 2px solid #2563eb;
-  opacity: 0.9;
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2);
-}
-
-.slot-low {
-  background-color: #fef3c7;
-  border: 2px solid #d97706;
-  opacity: 0.9;
-  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.2);
-}
-
-/* 深色模式下的边框和文字颜色适配 */
-.theme-dark .slot-empty,
-.theme-tech .slot-empty {
-  border-color: #64748b;
-}
-
-.theme-dark .slot-full,
-.theme-tech .slot-full {
-  border-color: #10b981;
-}
-
-.theme-dark .slot-normal,
-.theme-tech .slot-normal {
-  border-color: #3b82f6;
-}
-
-.theme-dark .slot-low,
-.theme-tech .slot-low {
-  border-color: #f59e0b;
-}
-
-/* 深色模式下的文字颜色适配 - 确保在浅色背景上可见 */
-.theme-dark .slot-number,
-.theme-tech .slot-number {
-  color: #1e293b;
-}
-
-.theme-dark .material-name,
-.theme-tech .material-name {
-  color: #1e293b;
-}
-
-.theme-dark .inventory-text,
-.theme-tech .inventory-text {
-  color: #64748b;
-}
-
-.theme-dark .empty-text,
-.theme-tech .empty-text {
-  color: #64748b;
-}
-
-/* 悬停效果 */
-.slot-item:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-.slot-item.empty {
-  @apply border-dashed;
-  border-color: var(--color-text-secondary);
-  background-color: var(--color-surface);
-  opacity: 0.5;
-}
-
-/* 货道号 - 最显眼 */
-.slot-number {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--color-text);
-  text-align: center;
-  margin-bottom: 4px;
-  flex-shrink: 0;
-  line-height: 1;
-}
-
-/* 卡片主体 */
-.slot-body {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
+.cabinet-card {
+  height: 100%;
   min-height: 0;
-}
-
-/* 物料内容区域 */
-.material-content {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  gap: 10px;
+  color: var(--color-text);
+}
+
+.mini-panel {
+  height: 100%;
+  display: grid;
+  align-content: center;
   gap: 6px;
 }
 
-/* 物料名称 - 次要显眼 */
-.material-name {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--color-text);
-  text-align: center;
+.mini-label,
+.mini-panel small,
+.health-metric span,
+.section-title span,
+.risk-row span,
+.priority-line span,
+.priority-card p,
+.priority-card footer span,
+.cabinet-risk-row span,
+.cabinet-selector span,
+.cabinet-toolbar span,
+.slot small {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.mini-panel strong {
+  font-size: 44px;
+  line-height: 1;
+  color: var(--color-warning);
+}
+
+.health-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.mode-compact .health-strip {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.health-metric {
+  min-width: 0;
+  padding: 8px 9px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(148, 163, 184, 0.06);
+}
+
+.health-metric strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.mode-compact .health-metric {
+  padding: 7px;
+}
+
+.mode-compact .health-metric strong {
+  font-size: 19px;
+}
+
+.health-metric.ok strong {
+  color: var(--color-success);
+}
+
+.health-metric.warn strong {
+  color: var(--color-warning);
+}
+
+.health-metric.danger strong {
+  color: var(--color-danger);
+}
+
+.health-bar {
+  height: 7px;
+  display: flex;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.16);
+}
+
+.health-bar span {
+  min-width: 4px;
+}
+
+.bar-ok {
+  background: var(--color-success);
+}
+
+.bar-warn {
+  background: var(--color-warning);
+}
+
+.bar-empty {
+  background: var(--color-danger);
+}
+
+.bar-empty-state {
+  flex: 1;
+  background: rgba(148, 163, 184, 0.28);
+}
+
+.compact-panel {
+  min-height: 0;
+  flex: 1;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.risk-list {
+  min-height: 0;
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  overflow: hidden;
+}
+
+.risk-row,
+.cabinet-risk-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 9px minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.risk-row i,
+.cabinet-risk-row i,
+.cabinet-selector i {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--color-success);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.12);
+}
+
+.risk-row.warning i,
+.cabinet-risk-row.warning i,
+.cabinet-selector i.warning {
+  background: var(--color-warning);
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.14);
+}
+
+.risk-row.empty i,
+.cabinet-risk-row.empty i,
+.cabinet-selector i.empty {
+  background: var(--color-danger);
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.14);
+}
+
+.risk-row div,
+.cabinet-risk-main {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.risk-row strong,
+.risk-row span,
+.cabinet-risk-row strong,
+.cabinet-risk-row span,
+.cabinet-selector b,
+.cabinet-selector span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  width: 100%;
-  line-height: 1.2;
 }
 
-/* 库存区域 */
-.inventory-section {
+.risk-row b,
+.cabinet-risk-row b {
+  font-size: 18px;
+  color: var(--color-warning);
+}
+
+.priority-line {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.priority-line.stable {
+  background: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.2);
+}
+
+.priority-line strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text);
+  font-size: 13px;
+}
+
+.full-panel {
+  min-height: 0;
+  flex: 1;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  width: 100%;
+  gap: 9px;
 }
 
-/* 库存数字 - 最小 */
-.inventory-text {
-  font-size: 10px;
-  font-weight: 600;
+.full-tabs {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 3px;
+  border-radius: 8px;
+  background: rgba(148, 163, 184, 0.1);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.full-tabs button {
+  padding: 5px 10px;
+  border-radius: 6px;
   color: var(--color-text-secondary);
-  font-family: 'Courier New', monospace;
+  font-size: 12px;
 }
 
-/* 进度条容器 */
-.progress-container {
-  width: 100%;
-  height: 4px;
-  background-color: var(--color-text-secondary);
-  opacity: 0.2;
-  border-radius: 2px;
+.full-tabs button.active {
+  color: var(--color-text);
+  background: var(--color-surface);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+}
+
+.risk-view {
+  min-height: 0;
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(210px, 0.85fr);
+  gap: 10px;
+}
+
+.priority-board,
+.cabinet-risk-board,
+.single-cabinet {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.section-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.section-title strong {
+  font-size: 13px;
+}
+
+.priority-grid {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
   overflow: hidden;
 }
 
-/* 进度条 */
-.progress-bar {
-  height: 100%;
-  border-radius: 2px;
-  transition: all 0.3s ease;
+.priority-card {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  padding: 9px;
+  border-radius: 8px;
+  border: 1px solid rgba(245, 158, 11, 0.24);
+  background: rgba(245, 158, 11, 0.09);
+  cursor: pointer;
 }
 
-.progress-full {
-  background: linear-gradient(90deg, #22c55e, #16a34a);
+.priority-card.empty {
+  border-color: rgba(239, 68, 68, 0.28);
+  background: rgba(239, 68, 68, 0.1);
 }
 
-.progress-normal {
-  background: linear-gradient(90deg, #3b82f6, #2563eb);
-}
-
-.progress-low {
-  background: linear-gradient(90deg, #f97316, #ea580c);
-}
-
-.inventory-info .current {
-  @apply font-mono;
-}
-
-.inventory-info .separator {
-  @apply mx-1;
-}
-
-.inventory-info .capacity {
-  @apply font-mono;
-}
-
-/* 空状态和无选择状态样式 */
-.empty-state,
-.no-selection {
-  @apply flex flex-col items-center justify-center py-8 text-center;
-  color: var(--color-text-secondary);
-}
-
-.empty-icon {
-  @apply w-12 h-12 mb-2 text-gray-400;
-  stroke-width: 1.5;
-}
-
-/* 响应式设计 */
-@media (max-width: 768px) {
-  .slots-grid {
-    @apply grid-cols-2;
-  }
-}
-
-@media (max-width: 480px) {
-  .slots-grid {
-    @apply grid-cols-1;
-  }
-}
-
-/* 空状态内容 */
-.empty-content {
+.priority-head,
+.priority-card footer {
+  min-width: 0;
   display: flex;
-  flex-direction: column;
+  justify-content: space-between;
+  gap: 8px;
   align-items: center;
-  justify-content: center;
-  gap: 4px;
-  height: 100%;
 }
 
-.empty-icon {
-  font-size: 20px;
-  opacity: 0.6;
-  filter: grayscale(100%);
+.priority-head strong,
+.priority-card p,
+.priority-card footer span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.empty-text {
+.priority-head span {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border-radius: 999px;
   font-size: 11px;
-  font-weight: 500;
-  color: #9ca3af;
+  color: var(--color-warning);
+  background: rgba(245, 158, 11, 0.14);
+}
+
+.priority-card.empty .priority-head span {
+  color: var(--color-danger);
+  background: rgba(239, 68, 68, 0.14);
+}
+
+.priority-card footer b {
+  color: var(--color-warning);
+}
+
+.priority-card.empty footer b {
+  color: var(--color-danger);
+}
+
+.cabinet-risk-list {
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  gap: 4px;
+}
+
+.cabinet-risk-row {
+  width: 100%;
+  text-align: left;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 8px;
+  padding: 8px;
+  background: rgba(148, 163, 184, 0.06);
+}
+
+.cabinet-risk-row:hover {
+  border-color: var(--color-primary);
+}
+
+.cabinet-risk-bar {
+  height: 5px;
+  display: flex;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.14);
+}
+
+.cabinet-risk-bar em.ok {
+  background: var(--color-success);
+}
+
+.cabinet-risk-bar em.warn {
+  background: var(--color-warning);
+}
+
+.cabinet-risk-bar em.empty {
+  background: var(--color-danger);
+}
+
+.cabinet-view {
+  min-height: 0;
+  flex: 1;
+  display: grid;
+  grid-template-columns: 170px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.cabinet-selector {
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  gap: 7px;
+}
+
+.cabinet-selector button {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  border-radius: 8px;
+  text-align: left;
+  background: rgba(148, 163, 184, 0.08);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.cabinet-selector button.active {
+  border-color: var(--color-primary);
+  background: rgba(59, 130, 246, 0.14);
+}
+
+.single-cabinet {
+  min-width: 0;
+}
+
+.cabinet-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.cabinet-toolbar > div:first-child {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.cabinet-toolbar strong,
+.cabinet-toolbar span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pager {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 6px;
+}
+
+.pager button {
+  padding: 5px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  background: rgba(148, 163, 184, 0.12);
+  color: var(--color-text);
+}
+
+.pager button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.slot-grid {
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
+  gap: 8px;
+  align-content: start;
+}
+
+.slot {
+  min-height: 68px;
+  display: grid;
+  gap: 3px;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(16, 185, 129, 0.1);
+}
+
+.slot span,
+.slot small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slot b {
+  font-size: 19px;
+  color: var(--color-success);
+}
+
+.slot.warning {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.32);
+}
+
+.slot.warning b {
+  color: var(--color-warning);
+}
+
+.slot.empty {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.32);
+}
+
+.slot.empty b {
+  color: var(--color-danger);
+}
+
+.slot.disabled {
+  opacity: 0.45;
+  background: rgba(148, 163, 184, 0.08);
+}
+
+.drag-snapshot,
+.empty-state {
+  min-height: 0;
+  display: grid;
+  place-content: center;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 8px;
+  border: 1px dashed rgba(148, 163, 184, 0.4);
+  background: rgba(148, 163, 184, 0.08);
+  color: var(--color-text-secondary);
+  text-align: center;
+  font-size: 13px;
+}
+
+@media (max-width: 900px) {
+  .risk-view,
+  .cabinet-view {
+    grid-template-columns: 1fr;
+  }
+
+  .cabinet-selector {
+    max-height: 120px;
+  }
 }
 </style>

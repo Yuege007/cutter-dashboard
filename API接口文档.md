@@ -1710,3 +1710,180 @@
 
 }
 
+---
+
+### **20260403 更新说明**
+
+以下内容根据新版《工具柜API文档20260403.pdf》补充。
+
+* **新增接口**:
+  * 2.20 查询历史补货记录：`/cutter/toolCabinetApi/replenishmentList`
+  * 2.21 查询库存预警的货道信息：`/cutter/toolCabinetApi/channelInventoryAlarm`
+* **字段说明更新**:
+  * 2.8 查询单个柜子的货道详情中，货道绑定物料字段以新版文档为准：`boxInfoVo`。
+  * 2.18 货道绑定中，新版 PDF 参数表写作 `id`，旧文档和当前项目代码使用 `Id`。接入时需以后端实际校验为准。
+* **通用说明补充**:
+  * 除登录接口外，其他接口都需要携带 `token` 请求头。
+  * 请求使用 `Content-Type: application/json;charset=UTF-8`。
+  * 传递 JSON 时，如果参数为空，至少需要传 `{}`。
+
+#### **2.20 查询历史补货记录**（20260403 更新）
+
+* **接口功能**:
+  * 请求体无 `boxInfoId` 或 `boxInfoId` 为 `0` 时，查询当前公司的历史补货记录。
+  * 请求体有 `boxInfoId` 且为正整数时，查询该物料的历史补货记录。
+* **接口地址 (URL)**: https://xxx/cutter/toolCabinetApi/replenishmentList
+* **请求方式**: POST
+* **Content-Type**: application/json;charset=UTF-8
+
+#### **请求 (Request)**
+
+* **请求头 (Headers)**:
+  * token: **必填**, 字符串 (String)。
+* **请求体 (Body - JSON)**:
+  * 请求体可不传。不传时默认查询当前时间最近 30 天的 20 条物料补货记录。
+
+默认请求体:
+
+{
+
+    "pageNum": 1,
+
+    "pageSize": 20,
+
+    "dayNum": 30,
+
+    "endTimeStr": "调用的实际时间，例如：2024-11-01 10:00:00",
+
+    "boxInfoId": 0
+
+}
+
+* **请求体参数说明**:
+  * pageNum (Integer): *可选*，页码，默认为 1。
+  * pageSize (Integer): *可选*，每页查询条数，默认为 20，最大为 100。
+  * dayNum (Integer): *可选*，查询的历史天数，默认 30 天，最多 31 天。
+  * endTimeStr (Date/String): *可选*，查询的结束时间，默认为当前时间。
+  * boxInfoId (Long): *可选*，物料 ID。为 0 或不传时查询公司历史补货记录；不为 0 时查询该物料的历史补货记录。
+
+#### **响应 (Response)**
+
+**1. 请求体无 `boxInfoId` 或 `boxInfoId` 为 0 时，data 内返回字段**
+
+* totalCount: 查询范围内的总记录数。
+* recordList: 补货记录数组，每条记录包含：
+  * boxInfoId: 物料 ID。
+  * productName: 物料名称。
+  * brandName: 品牌名称。
+  * specification: 规格。
+  * cuttingNo: 工具柜编号。
+  * materialCode: 物料代码。
+  * cutterType: 物料类别。
+  * restockingNum: 补货数量。
+  * restockingCount: 补货次数。
+
+**2. 请求体有 `boxInfoId` 且不为 0 时，data 内返回字段**
+
+* totalCount: 查询范围内的总记录数，也是该物料的补货次数。
+* recordList: 物料补货记录数组，每条记录包含：
+  * consumableType: 物料类型。
+  * boxInfoId: 物料 ID。
+  * productName: 物料名称。
+  * itemNoAlias: 货道编号。
+  * createTime: 补货时间。
+  * createBy: 补货人。
+  * brandName: 品牌名称。
+  * cCount: 补货数量。
+  * specification: 物料规格。
+  * cuttingNo: 工具柜编号。
+  * newRepertory: 补货后货道库存。
+  * oldRepertory: 补货前货道库存。
+  * materialCode: 物料代码。
+  * cutterType: 物料类型。
+
+#### **2.21 查询库存预警的货道信息**（20260403 更新）
+
+* **接口功能**: 查询货道列表信息，支持查询达到或未达到货道库存预警的货道列表数据。
+* **接口地址 (URL)**: https://xxx/cutter/toolCabinetApi/channelInventoryAlarm
+* **请求方式**: POST
+* **Content-Type**: application/json;charset=UTF-8
+
+#### **请求 (Request)**
+
+* **请求头 (Headers)**:
+  * token: **必填**, 字符串 (String)。
+* **请求体 (Body - JSON)**:
+
+{
+
+    "cuttingToolsId": 0,
+
+    "disItemNo": 1,
+
+    "itemNoPrefix": "A",
+
+    "rwarnFlag": 0,
+
+    "cuttingNo": "DF20240510001",
+
+    "cuttingName": "工具柜名称",
+
+    "pageNum": 1,
+
+    "pageSize": 20
+
+}
+
+* **请求体参数说明**:
+  * cuttingToolsId (Long): *可选*，柜子 ID。默认查询公司下面所有柜子。
+  * disItemNo (Integer): *可选*，货道状态，`1` 正常，`2` 禁用。默认查询所有。
+  * itemNoPrefix (String): *可选*，货道前缀。
+  * rwarnFlag (Integer): *可选*，库存标识，`0` 不足，`1` 充足，默认 `0`。
+  * cuttingNo (String): *可选*，工具柜编号。
+  * cuttingName (String): *可选*，工具柜名称。
+  * pageNum (Integer): *可选*，页码，默认为 1。
+  * pageSize (Integer): *可选*，每页查询条数，默认为 20。
+
+#### **响应 (Response)**
+
+**✅ 成功响应**
+
+* data.totalCount: 符合条件的总数。
+* data.recordList: 货道记录数组，每条记录包含：
+  * id: 货道 ID。
+  * cuttingToolsId: 柜子 ID。
+  * cuttingBoxInfoId: 物料 ID。
+  * inventory: 货道数量/容量。
+  * surplus: 货道库存。
+  * itmeNo: 货道号。
+  * disItemNo: 货道状态，`1` 正常，`2` 禁用。
+  * bindNum: 包装数量。
+  * itemNoAlias: 货道别名。
+  * itemNoPrefix: 货道前缀。
+  * isPid: `1` 源货道，`2` 克隆货道。
+  * orderId: 克隆货道排序。
+  * company: 公司名。
+  * cuttingName: 工具柜名。
+  * cuttingNo: 工具柜编号。
+  * exState: 状态，`1` 异常，`2` 正常。
+  * cuttingBoxInfo: 物料详情对象，新版示例中包含物料价格、库存、型号、规格、品牌、物料代码、库存预警等字段。
+
+**❌ 失败响应**
+
+{
+
+    "status": 0,
+
+    "code": "FAILED",
+
+    "message": "服务异常",
+
+    "data": null,
+
+    "duration": 0,
+
+    "errorCode": null,
+
+    "success": false
+
+}

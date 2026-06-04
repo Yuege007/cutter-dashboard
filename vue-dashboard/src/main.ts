@@ -7,9 +7,10 @@ import App from './App.vue'
 
 // 导入服务
 import { registerAllCards } from '@/cards/registry'
-import { setupDefaultPollingTasks, pollingService } from '@/services/polling'
+import { setupDefaultPollingTasks, startDefaultPollingTasks } from '@/services/polling'
 import { useThemeStore } from '@/stores/theme'
 import { useCardStore } from '@/stores/card'
+import { useAuthStore } from '@/stores/auth'
 import { initCacheSystem } from '@/services/cache/init'
 import { getCacheManager, DEFAULT_DATA_CLASSIFICATION } from '@/services/cache'
 
@@ -72,8 +73,11 @@ const initializeApp = async () => {
     // 4. 设置轮询任务
     setupDefaultPollingTasks()
 
-    // 启动轮询服务
-    pollingService.start()
+    // 5. 仅在已有登录态恢复成功后启动轮询，避免登录页提前打空 token 请求
+    const authStore = useAuthStore()
+    if (await authStore.restoreFromStorage()) {
+      startDefaultPollingTasks()
+    }
 
     console.log('🚀 Application initialized successfully')
     console.log(`📦 Registered ${cardStore.availableCards.length} card types`)

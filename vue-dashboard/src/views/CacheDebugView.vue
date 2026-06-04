@@ -13,9 +13,6 @@
           <button @click="testCachePerformance" class="btn btn-primary">
             🏃‍♂️ 性能测试
           </button>
-          <button @click="warmupCache" class="btn btn-success">
-            🔥 预热缓存
-          </button>
           <button @click="clearAllCache" class="btn btn-warning">
             🧹 清理缓存
           </button>
@@ -118,7 +115,6 @@ import { ref } from 'vue'
 import CacheDebugPanel from '@/components/debug/CacheDebugPanel.vue'
 import { getCacheManager } from '@/services/cache'
 import { diagnoseCacheSystem, getCacheSystemHealth } from '@/services/cache/init'
-import cachedApi from '@/services/cachedApi'
 
 // 响应式数据
 const operationResult = ref<string | null>(null)
@@ -137,17 +133,6 @@ const testCachePerformance = async () => {
     }
   } catch (error) {
     operationResult.value = `❌ 性能测试失败: ${error.message}`
-  }
-}
-
-const warmupCache = async () => {
-  try {
-    operationResult.value = '🔥 正在预热缓存...'
-    
-    await cachedApi.cache.warmupCommonData()
-    operationResult.value = '✅ 缓存预热完成！常用数据已加载到缓存中。'
-  } catch (error) {
-    operationResult.value = `❌ 缓存预热失败: ${error.message}`
   }
 }
 

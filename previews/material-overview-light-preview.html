@@ -1,0 +1,835 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>物料库存总览浅色预览</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #eef3f8;
+      --surface: #ffffff;
+      --surface-2: #f8fafc;
+      --surface-3: #eef6ff;
+      --line: #dbe4ee;
+      --line-soft: #e8eef5;
+      --text: #132033;
+      --muted: #64748b;
+      --muted-2: #94a3b8;
+      --blue: #0284c7;
+      --cyan: #0891b2;
+      --green: #16a34a;
+      --amber: #d97706;
+      --red: #dc2626;
+      --violet: #7c3aed;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background:
+        linear-gradient(rgba(15, 23, 42, 0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(15, 23, 42, 0.035) 1px, transparent 1px),
+        linear-gradient(180deg, #f8fafc 0%, #e9f1f9 100%);
+      background-size: 28px 28px, 28px 28px, auto;
+      color: var(--text);
+      font-family: "HarmonyOS Sans SC", "Microsoft YaHei", "PingFang SC", sans-serif;
+    }
+
+    .stage {
+      width: min(1180px, calc(100vw - 40px));
+      padding: 24px;
+    }
+
+    .card {
+      height: 700px;
+      display: grid;
+      grid-template-rows: auto auto 1fr;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background:
+        linear-gradient(90deg, rgba(2, 132, 199, 0.08), transparent 36%),
+        var(--surface);
+      box-shadow: 0 22px 56px rgba(15, 23, 42, 0.14);
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 18px 20px 12px;
+      border-bottom: 1px solid var(--line-soft);
+    }
+
+    .title-block {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .title-mark {
+      width: 4px;
+      height: 36px;
+      border-radius: 999px;
+      background: linear-gradient(180deg, var(--blue), var(--green));
+      box-shadow: 0 0 14px rgba(2, 132, 199, 0.25);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: 0;
+    }
+
+    .subline {
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .header-tools {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .cycle {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .icon-btn {
+      display: grid;
+      width: 26px;
+      height: 26px;
+      place-items: center;
+      border: 1px solid #cbd5e1;
+      border-radius: 999px;
+      background: #ffffff;
+      color: #475569;
+      line-height: 1;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--line-soft);
+    }
+
+    .metric {
+      position: relative;
+      min-width: 0;
+      overflow: hidden;
+      padding: 15px 16px 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+      box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+    }
+
+    .metric::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 3px;
+      background: var(--accent);
+      opacity: 0.9;
+    }
+
+    .metric-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .metric-label {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .metric-chip {
+      color: var(--muted-2);
+      font-size: 12px;
+      font-family: "DIN Alternate", "Bahnschrift", Consolas, monospace;
+    }
+
+    .metric-value {
+      margin-top: 9px;
+      color: var(--accent);
+      font-family: "DIN Alternate", "Bahnschrift", Consolas, monospace;
+      font-size: 42px;
+      font-weight: 800;
+      line-height: 1;
+      letter-spacing: 0;
+      white-space: nowrap;
+    }
+
+    .metric-note {
+      margin-top: 7px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .content {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1.36fr) minmax(320px, 0.92fr);
+      gap: 14px;
+      padding: 14px 20px 18px;
+    }
+
+    .panel {
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.86);
+      box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 11px 13px;
+      border-bottom: 1px solid var(--line-soft);
+      background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+    }
+
+    .panel-title {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 16px;
+      font-weight: 800;
+    }
+
+    .pager {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .progress {
+      height: 3px;
+      overflow: hidden;
+      background: #e2e8f0;
+    }
+
+    .progress span {
+      display: block;
+      width: 58%;
+      height: 100%;
+      background: linear-gradient(90deg, var(--blue), var(--amber));
+    }
+
+    .view-tabs {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line-soft);
+    }
+
+    .view-tab {
+      min-width: 0;
+      padding: 7px 8px;
+      overflow: hidden;
+      border: 1px solid #dbe4ee;
+      border-radius: 8px;
+      color: var(--muted);
+      background: #f8fafc;
+      font-size: 13px;
+      text-align: center;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .view-tab.active {
+      color: #075985;
+      border-color: rgba(2, 132, 199, 0.3);
+      background: rgba(14, 165, 233, 0.12);
+    }
+
+    .overview-body {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 220px;
+      gap: 12px;
+      padding: 12px;
+    }
+
+    .category-list {
+      min-height: 0;
+      display: grid;
+      grid-template-rows: repeat(7, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .category-row {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 116px) minmax(0, 1fr) 62px 82px;
+      align-items: center;
+      gap: 10px;
+      padding: 0 10px;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      background: #ffffff;
+    }
+
+    .category-name {
+      min-width: 0;
+      overflow: hidden;
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 700;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .track {
+      position: relative;
+      height: 12px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: #e2e8f0;
+    }
+
+    .fill {
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--blue), var(--violet));
+    }
+
+    .count,
+    .value {
+      color: var(--text);
+      font-family: "DIN Alternate", "Bahnschrift", Consolas, monospace;
+      font-size: 13px;
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .value {
+      color: var(--red);
+    }
+
+    .value-band {
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      gap: 10px;
+      padding: 11px;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      background: #f8fafc;
+    }
+
+    .band-title {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .band {
+      min-height: 0;
+      display: grid;
+      grid-template-rows: 1.45fr 1.1fr 0.86fr 0.68fr 0.55fr;
+      gap: 6px;
+    }
+
+    .band-seg {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 0;
+      padding: 0 10px;
+      overflow: hidden;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .band-seg span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .band-seg strong {
+      flex: none;
+      font-family: "DIN Alternate", "Bahnschrift", Consolas, monospace;
+    }
+
+    .band-foot {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .mini-stat {
+      min-width: 0;
+      padding: 8px;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      background: #ffffff;
+    }
+
+    .mini-stat div {
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .mini-stat strong {
+      display: block;
+      margin-top: 5px;
+      color: var(--text);
+      font-family: "DIN Alternate", "Bahnschrift", Consolas, monospace;
+      font-size: 16px;
+      white-space: nowrap;
+    }
+
+    .side {
+      display: grid;
+      grid-template-rows: auto minmax(0, 0.9fr) minmax(0, 1.1fr);
+      gap: 10px;
+      padding: 12px;
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .summary-item {
+      min-width: 0;
+      padding: 10px;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      background: #ffffff;
+    }
+
+    .summary-label {
+      overflow: hidden;
+      color: var(--muted);
+      font-size: 12px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .summary-value {
+      margin-top: 6px;
+      overflow: hidden;
+      color: var(--text);
+      font-size: 15px;
+      font-weight: 800;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .heat-panel {
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 9px;
+    }
+
+    .mini-title {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .heat-grid {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .heat-cell {
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      gap: 5px;
+      padding: 9px;
+      overflow: hidden;
+      border: 1px solid rgba(var(--heat), 0.18);
+      border-radius: 8px;
+      background: rgba(var(--heat), 0.1);
+    }
+
+    .heat-cell strong,
+    .heat-cell span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .heat-cell strong {
+      color: var(--text);
+      font-size: 12px;
+    }
+
+    .heat-cell b {
+      align-self: center;
+      color: var(--text);
+      font-family: "DIN Alternate", "Bahnschrift", Consolas, monospace;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .heat-cell span {
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .top-list {
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto auto repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .top-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .top-progress {
+      height: 3px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: #e2e8f0;
+    }
+
+    .top-progress span {
+      display: block;
+      width: 48%;
+      height: 100%;
+      background: linear-gradient(90deg, var(--violet), var(--blue));
+    }
+
+    .top-item {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 28px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 9px;
+      padding: 0 10px;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      background: #ffffff;
+    }
+
+    .rank {
+      display: grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border-radius: 999px;
+      background: rgba(14, 165, 233, 0.12);
+      color: #075985;
+      font-family: "DIN Alternate", "Bahnschrift", Consolas, monospace;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .top-name {
+      min-width: 0;
+      overflow: hidden;
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 800;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .top-meta {
+      margin-top: 3px;
+      overflow: hidden;
+      color: var(--muted);
+      font-size: 11px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .top-value {
+      color: var(--red);
+      font-family: "DIN Alternate", "Bahnschrift", Consolas, monospace;
+      font-size: 13px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+  <main class="stage">
+    <section class="card">
+      <header class="header">
+        <div class="title-block">
+          <div class="title-mark"></div>
+          <div>
+            <h1>物料库存总览</h1>
+            <div class="subline">规模、结构、重点类别</div>
+          </div>
+        </div>
+        <div class="header-tools">
+          <button class="icon-btn" aria-label="上一页">‹</button>
+          <div class="cycle">第 1 / 4 页</div>
+          <button class="icon-btn" aria-label="下一页">›</button>
+        </div>
+      </header>
+
+      <section class="metrics">
+        <div class="metric" style="--accent: var(--blue)">
+          <div class="metric-top">
+            <span class="metric-label">物料种类</span>
+            <span class="metric-chip">SKU</span>
+          </div>
+          <div class="metric-value">1,026</div>
+          <div class="metric-note">覆盖 8 个主要类别</div>
+        </div>
+        <div class="metric" style="--accent: var(--green)">
+          <div class="metric-top">
+            <span class="metric-label">总库存量</span>
+            <span class="metric-chip">QTY</span>
+          </div>
+          <div class="metric-value">58,320</div>
+          <div class="metric-note">当前账面库存数量</div>
+        </div>
+        <div class="metric" style="--accent: var(--red)">
+          <div class="metric-top">
+            <span class="metric-label">库存总价值</span>
+            <span class="metric-chip">VALUE</span>
+          </div>
+          <div class="metric-value">￥126.4万</div>
+          <div class="metric-note">按当前物料单价估算</div>
+        </div>
+      </section>
+
+      <section class="content">
+        <section class="panel">
+          <div class="panel-head">
+            <div class="panel-title">类别结构</div>
+            <div class="pager">
+              <button class="icon-btn" aria-label="上一组">‹</button>
+              <span>第 1 / 4 页</span>
+              <button class="icon-btn" aria-label="下一组">›</button>
+            </div>
+          </div>
+          <div class="progress"><span></span></div>
+          <div class="view-tabs">
+            <div class="view-tab active">类别分布</div>
+            <div class="view-tab">价值 Top</div>
+            <div class="view-tab">库存 Top</div>
+            <div class="view-tab">聚合热力</div>
+          </div>
+
+          <div class="overview-body">
+            <div class="category-list">
+              <div class="category-row">
+                <div class="category-name">数控刀具</div>
+                <div class="track"><div class="fill" style="width: 100%"></div></div>
+                <div class="count">268种</div>
+                <div class="value">￥38.2万</div>
+              </div>
+              <div class="category-row">
+                <div class="category-name">刀片耗材</div>
+                <div class="track"><div class="fill" style="width: 84%"></div></div>
+                <div class="count">214种</div>
+                <div class="value">￥27.6万</div>
+              </div>
+              <div class="category-row">
+                <div class="category-name">钻孔工具</div>
+                <div class="track"><div class="fill" style="width: 70%"></div></div>
+                <div class="count">176种</div>
+                <div class="value">￥21.8万</div>
+              </div>
+              <div class="category-row">
+                <div class="category-name">辅料配件</div>
+                <div class="track"><div class="fill" style="width: 52%"></div></div>
+                <div class="count">132种</div>
+                <div class="value">￥13.2万</div>
+              </div>
+              <div class="category-row">
+                <div class="category-name">电气器件</div>
+                <div class="track"><div class="fill" style="width: 40%"></div></div>
+                <div class="count">96种</div>
+                <div class="value">￥10.1万</div>
+              </div>
+              <div class="category-row">
+                <div class="category-name">夹具工装</div>
+                <div class="track"><div class="fill" style="width: 31%"></div></div>
+                <div class="count">62种</div>
+                <div class="value">￥6.2万</div>
+              </div>
+              <div class="category-row">
+                <div class="category-name">量具检具</div>
+                <div class="track"><div class="fill" style="width: 25%"></div></div>
+                <div class="count">44种</div>
+                <div class="value">￥4.6万</div>
+              </div>
+            </div>
+
+            <aside class="value-band">
+              <div class="band-title">价值占比带</div>
+              <div class="band">
+                <div class="band-seg" style="background: linear-gradient(90deg, #0284c7, #38bdf8)">
+                  <span>数控刀具</span><strong>30.2%</strong>
+                </div>
+                <div class="band-seg" style="background: linear-gradient(90deg, #2563eb, #7c3aed)">
+                  <span>刀片耗材</span><strong>21.8%</strong>
+                </div>
+                <div class="band-seg" style="background: linear-gradient(90deg, #059669, #22c55e)">
+                  <span>钻孔工具</span><strong>17.2%</strong>
+                </div>
+                <div class="band-seg" style="background: linear-gradient(90deg, #d97706, #f59e0b)">
+                  <span>辅料配件</span><strong>10.4%</strong>
+                </div>
+                <div class="band-seg" style="background: linear-gradient(90deg, #64748b, #94a3b8)">
+                  <span>其他类别</span><strong>20.4%</strong>
+                </div>
+              </div>
+              <div class="band-foot">
+                <div class="mini-stat">
+                  <div>最高价值</div>
+                  <strong>刀具</strong>
+                </div>
+                <div class="mini-stat">
+                  <div>最大库存</div>
+                  <strong>刀片</strong>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </section>
+
+        <aside class="panel">
+          <div class="panel-head">
+            <div class="panel-title">规模摘要</div>
+            <span class="cycle">按价值排序</span>
+          </div>
+          <div class="side">
+            <div class="summary">
+              <div class="summary-item">
+                <div class="summary-label">最高价值类别</div>
+                <div class="summary-value">数控刀具</div>
+              </div>
+              <div class="summary-item">
+                <div class="summary-label">库存最多类别</div>
+                <div class="summary-value">刀片耗材</div>
+              </div>
+              <div class="summary-item">
+                <div class="summary-label">平均类别价值</div>
+                <div class="summary-value">￥15.8万</div>
+              </div>
+              <div class="summary-item">
+                <div class="summary-label">平均类别库存</div>
+                <div class="summary-value">7,290</div>
+              </div>
+            </div>
+
+            <section class="heat-panel">
+              <div class="mini-title">
+                <span>聚合热力</span>
+                <span>类别 / 价值</span>
+              </div>
+              <div class="heat-grid">
+                <div class="heat-cell" style="--heat: 220, 38, 38"><strong>刀具</strong><b>38.2万</b><span>268种</span></div>
+                <div class="heat-cell" style="--heat: 217, 119, 6"><strong>刀片</strong><b>27.6万</b><span>214种</span></div>
+                <div class="heat-cell" style="--heat: 217, 119, 6"><strong>钻具</strong><b>21.8万</b><span>176种</span></div>
+                <div class="heat-cell" style="--heat: 2, 132, 199"><strong>辅料</strong><b>13.2万</b><span>132种</span></div>
+                <div class="heat-cell" style="--heat: 2, 132, 199"><strong>电气</strong><b>10.1万</b><span>96种</span></div>
+                <div class="heat-cell" style="--heat: 22, 163, 74"><strong>夹具</strong><b>6.2万</b><span>62种</span></div>
+                <div class="heat-cell" style="--heat: 22, 163, 74"><strong>量具</strong><b>4.6万</b><span>44种</span></div>
+                <div class="heat-cell" style="--heat: 22, 163, 74"><strong>其他</strong><b>4.7万</b><span>34种</span></div>
+              </div>
+            </section>
+
+            <section class="top-list">
+              <div class="top-head">
+                <span>重点类别</span>
+                <div class="pager">
+                  <button class="icon-btn" aria-label="上一组">‹</button>
+                  <span>1 / 2</span>
+                  <button class="icon-btn" aria-label="下一组">›</button>
+                </div>
+              </div>
+              <div class="top-progress"><span></span></div>
+              <div class="top-item">
+                <div class="rank">1</div>
+                <div>
+                  <div class="top-name">数控刀具</div>
+                  <div class="top-meta">268种 | 占总价值 30.2%</div>
+                </div>
+                <div class="top-value">￥38.2万</div>
+              </div>
+              <div class="top-item">
+                <div class="rank">2</div>
+                <div>
+                  <div class="top-name">刀片耗材</div>
+                  <div class="top-meta">库存量 16,820 | 214种</div>
+                </div>
+                <div class="top-value">￥27.6万</div>
+              </div>
+              <div class="top-item">
+                <div class="rank">3</div>
+                <div>
+                  <div class="top-name">钻孔工具</div>
+                  <div class="top-meta">176种 | 占总价值 17.2%</div>
+                </div>
+                <div class="top-value">￥21.8万</div>
+              </div>
+              <div class="top-item">
+                <div class="rank">4</div>
+                <div>
+                  <div class="top-name">辅料配件</div>
+                  <div class="top-meta">库存量 8,630 | 132种</div>
+                </div>
+                <div class="top-value">￥13.2万</div>
+              </div>
+            </section>
+          </div>
+        </aside>
+      </section>
+    </section>
+  </main>
+</body>
+</html>

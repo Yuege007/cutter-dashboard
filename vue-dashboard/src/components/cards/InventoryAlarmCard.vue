@@ -1,504 +1,326 @@
 <template>
   <BaseCard
-    :card-id="cardId"
-    :title="cardTitle"
-    :mode="mode"
-    :mode-locked="props.modeLocked"
-    :forced-mode="props.forcedMode"
+    :title="title"
+    variant="warning"
+    :mode="displayMode"
+    :width="width"
+    :height="height"
+    :min-width="minWidth"
+    :min-height="minHeight"
     :loading="loading"
-    :error="error"
-    v-bind="$attrs"
+    :has-error="!!error"
+    :error-message="error"
+    :show-settings="showSettings"
+    :show-refresh="showRefresh"
+    :locked="locked"
+    :mode-locked="modeLocked"
     @refresh="handleRefresh"
-    @settings="handleSettings"
+    @settings="$emit('settings')"
+    @delete="$emit('delete')"
+    @lock="value => $emit('lock', value)"
+    @mode-lock="(locked, mode) => $emit('modeLock', locked, mode)"
   >
-    <!-- Mini 视图 (1x1 ~ 2x2) -->
-    <template v-if="mode === 'mini'">
-      <div class="mini-view">
-        <div class="mini-value" :class="{ 'has-alarm': alarmCount > 0 }">
-          {{ alarmCount }}
-        </div>
-        <div class="mini-label">预警物料</div>
-      </div>
-    </template>
+    <template #default>
+      <div class="alarm-card" :class="`mode-${displayMode}`">
+        <section v-if="displayMode === 'mini'" class="mini">
+          <span>库存预警</span>
+          <strong>{{ warnings.length }}</strong>
+          <small>{{ emptyCount }} 断供 · {{ lowCount }} 低库存</small>
+        </section>
 
-    <!-- Compact 视图 (3x2 ~ 4x3) -->
-    <template v-else-if="mode === 'compact'">
-      <div class="compact-view">
-        <div class="compact-header">
-          <h3 class="compact-title">Top 5 紧缺物料</h3>
-        </div>
-        <div class="material-list">
-          <div
-            v-for="material in topAlarmMaterials"
-            :key="material.id"
-            class="material-item"
-          >
-            <div class="material-info">
-              <span class="material-name">{{ material.productName }}</span>
-              <span class="material-ratio">
-                (<span class="ratio-current" :style="{ color: getColor(material.progressPercent) }">{{ material.inventory }}</span>
-                <span class="ratio-sep"> / </span>
-                <span class="ratio-warn">{{ material.inventoryWarn }}</span>)
-                <span v-if="material.inventory === 0" class="zero-tag">断供</span>
-              </span>
-            </div>
-            <div class="progress-bar">
-              <div 
-                class="progress-fill"
-                :style="{ width: `${Math.max(material.progressPercent, 5)}%`, background: getGradient(material.progressPercent) }"
-              ></div>
+        <template v-else>
+          <div class="alarm-summary">
+            <article class="danger">
+              <span>断供</span>
+              <strong>{{ emptyCount }}</strong>
+            </article>
+            <article class="warn">
+              <span>低库存</span>
+              <strong>{{ lowCount }}</strong>
+            </article>
+            <article>
+              <span>耗材预警</span>
+              <strong>{{ materialWarningCount }}</strong>
+            </article>
+            <article>
+              <span>货道预警</span>
+              <strong>{{ slotWarningCount }}</strong>
+            </article>
+          </div>
+
+          <div v-if="displayMode === 'full'" class="tabs">
+            <button :class="{ active: activeTab === 'all' }" @click="activeTab = 'all'">全部</button>
+            <button :class="{ active: activeTab === 'material' }" @click="activeTab = 'material'">耗材</button>
+            <button :class="{ active: activeTab === 'slot' }" @click="activeTab = 'slot'">货道</button>
+          </div>
+
+          <div class="warning-list custom-scrollbar">
+            <article
+              v-for="(item, index) in visibleWarnings"
+              :key="warningKey(item, index)"
+              class="warning-row"
+              :class="item.level"
+            >
+              <div class="risk-dot"></div>
+              <div class="warning-main">
+                <strong>{{ item.productName || item.materialCode || '未命名刀具' }}</strong>
+                <span>{{ item.brandName || '-' }} · {{ item.specification || '-' }}</span>
+                <small v-if="displayMode === 'full'">
+                  {{ item.source === 'slot' ? `${item.cuttingName || item.cuttingNo || '未知刀柜'} / ${item.itemNoAlias || '未知货道'}` : item.materialCode || '无物料编码' }}
+                </small>
+              </div>
+              <div class="warning-value">
+                <b>{{ item.inventory }}</b>
+                <span>/ {{ item.warnValue }}</span>
+              </div>
+            </article>
+
+            <div v-if="visibleWarnings.length === 0" class="empty-state">
+              当前暂无库存预警
             </div>
           </div>
-          <EmptyState
-            v-if="topAlarmMaterials.length === 0"
-            description="暂无预警物料"
-            :icon-component="CheckCircleIcon"
-            size="sm"
-          />
-        </div>
-      </div>
-    </template>
-
-    <!-- Full 视图 (≥4x3) -->
-    <template v-else>
-      <div class="full-view">
-        <div class="full-header">
-          <h3 class="full-title"><span class="count-highlight">{{ filteredAlarmMaterials.length }}</span> 种物料库存不足</h3>
-          <div class="header-actions">
-            <select v-model="selectedFilter" class="filter-select" @change="applyFilter">
-              <option value="all">全部类别</option>
-              <option v-for="type in materialTypes" :key="type" :value="type">
-                {{ type }}
-              </option>
-            </select>
-          </div>
-        </div>
-        <div class="table-container">
-          <table class="alarm-data-table">
-            <thead>
-              <tr class="table-header-row">
-                <th class="header-material">物料名称</th>
-                <th class="header-inventory">当前库存</th>
-                <th class="header-warn">预警库存</th>
-                <th class="header-diff">差值</th>
-                <th class="header-type">类别</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="material in filteredAlarmMaterials"
-                :key="material.id"
-                class="data-row"
-              >
-                <td class="cell-material">
-                  <div class="material-content">
-                    <div class="material-name">{{ material.productName }}</div>
-                    <div class="material-spec">{{ material.specification }}</div>
-                  </div>
-                </td>
-                <td class="cell-inventory">{{ material.inventory }}</td>
-                <td class="cell-warn">{{ material.inventoryWarn }}</td>
-                <td class="cell-diff" :class="{ 'negative': material.diff < 0 }">
-                  {{ material.diff }}
-                </td>
-                <td class="cell-type">{{ material.cutterType }}</td>
-              </tr>
-            </tbody>
-          </table>
-          <EmptyState
-            v-if="filteredAlarmMaterials.length === 0"
-            :description="selectedFilter === 'all' ? '暂无预警物料' : '该类别暂无预警物料'"
-            :icon-component="CheckCircleIcon"
-            size="md"
-          />
-        </div>
+        </template>
       </div>
     </template>
   </BaseCard>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { computed, ref } from 'vue'
 import BaseCard from './BaseCard.vue'
-import EmptyState from '@/components/common/EmptyState.vue'
-import CheckCircleIcon from '@/components/icons/CheckCircleIcon.vue'
-import cachedApi from '@/services/cachedApi'
-import type { BaseCardProps, BaseCardEmits } from '@/types/card'
-import { useBaseCard, CARD_TITLES } from '@/composables/useBaseCard'
 import { useDataStore } from '@/stores/data'
+import { pollingService } from '@/services/polling'
+import { detectCardMode } from '@/utils/cardSizeManager'
+import type { CardMode } from '@/types'
+import type { CutterInventoryWarning } from '@/types/cutter'
 
-// Props和Events使用统一接口
-const props = defineProps<BaseCardProps>()
-const emit = defineEmits<BaseCardEmits>()
-
-// 使用统一的卡片Hook
-const {
-  mode,
-  isMini,
-  isCompact,
-  isFull,
-  loading,
-  error,
-  data: alarmMaterials,
-  refresh,
-  cardTitle
-} = useBaseCard(props, emit, {
-  fetcher: () => cachedApi.material.getWarnMaterials(1, 100).then(res => res.data?.rows || []),
-  titles: {
-    mini: '库存',
-    compact: '紧缺物料',
-    full: '预警物料清单',
-    default: '库存状态'
-  }
+const props = withDefaults(defineProps<{
+  title?: string
+  width?: number
+  height?: number
+  minWidth?: number
+  minHeight?: number
+  forcedMode?: CardMode
+  modeLocked?: boolean
+  showRefresh?: boolean
+  showSettings?: boolean
+  locked?: boolean
+}>(), {
+  title: '库存预警',
+  width: 3,
+  height: 2,
+  minWidth: 2,
+  minHeight: 2,
+  showRefresh: true,
+  showSettings: true,
+  locked: false
 })
 
-// 卡片特有的响应式数据
-const selectedFilter = ref('all')
+defineEmits<{
+  refresh: []
+  settings: []
+  delete: []
+  lock: [locked: boolean]
+  modeLock: [locked: boolean, mode: CardMode]
+}>()
 
-const alarmCount = computed(() => alarmMaterials.value?.length || 0)
+const dataStore = useDataStore()
+const activeTab = ref<'all' | 'material' | 'slot'>('all')
+const displayMode = computed(() => props.forcedMode || detectCardMode(props.width, props.height))
 
-const topAlarmMaterials = computed(() => {
-  if (!alarmMaterials.value) return []
-  return alarmMaterials.value
-    .map(material => ({
-      ...material,
-      diff: material.inventory - material.inventoryWarn,
-      progressPercent: Math.min((material.inventory / material.inventoryWarn) * 100, 100)
-    }))
-    .sort((a, b) => a.progressPercent - b.progressPercent)
-    .slice(0, 5)
+const materialWarnings = computed<CutterInventoryWarning[]>(() => dataStore.getData('cutter-inventory-warnings') || [])
+const slotWarnings = computed<CutterInventoryWarning[]>(() => dataStore.getData('cutter-item-warnings') || [])
+const warnings = computed(() => {
+  return [...materialWarnings.value, ...slotWarnings.value]
+    .sort((a, b) => {
+      if (a.level !== b.level) return a.level === 'empty' ? -1 : 1
+      return b.shortage - a.shortage
+    })
 })
 
-const materialTypes = computed(() => {
-  if (!alarmMaterials.value) return []
-  const types = new Set(alarmMaterials.value.map(m => m.cutterType))
-  return Array.from(types).filter(Boolean)
+const emptyCount = computed(() => warnings.value.filter(item => item.level === 'empty').length)
+const lowCount = computed(() => warnings.value.filter(item => item.level === 'low').length)
+const materialWarningCount = computed(() => materialWarnings.value.length)
+const slotWarningCount = computed(() => slotWarnings.value.length)
+
+const visibleWarnings = computed(() => {
+  const sourceFiltered = activeTab.value === 'all'
+    ? warnings.value
+    : warnings.value.filter(item => item.source === activeTab.value)
+
+  return displayMode.value === 'compact' ? sourceFiltered.slice(0, 5) : sourceFiltered.slice(0, 12)
 })
 
-const filteredAlarmMaterials = computed(() => {
-  if (!alarmMaterials.value) return []
-  let filtered = alarmMaterials.value.map(material => ({
-    ...material,
-    diff: material.inventory - material.inventoryWarn
-  }))
-
-  if (selectedFilter.value !== 'all') {
-    filtered = filtered.filter(m => m.cutterType === selectedFilter.value)
-  }
-
-  return filtered.sort((a, b) => a.diff - b.diff)
-})
-
-// 方法
-const getProgressClass = (percent: number) => {
-  // 已不使用类名映射，改为通过CSS变量生成渐变色
-  return ''
-}
-
-const getLevelKey = (percent: number) => {
-  if (percent === 0) return 'zero'
-  if (percent < 20) return 'severe'
-  if (percent < 50) return 'short'
-  if (percent < 80) return 'warn'
-  return 'good'
-}
-
-const getGradient = (percent: number) => {
-  const key = getLevelKey(percent)
-  return `linear-gradient(90deg, var(--inv-${key}) 0%, var(--inv-${key}-light) 80%)`
-}
-
-const getColor = (percent: number) => {
-  const key = getLevelKey(percent)
-  return `var(--inv-${key})`
-}
+const loading = computed(() =>
+  dataStore.isLoading('cutter-inventory-warnings') ||
+  dataStore.isLoading('cutter-item-warnings')
+)
+const error = computed(() =>
+  dataStore.getError('cutter-inventory-warnings') ||
+  dataStore.getError('cutter-item-warnings') ||
+  ''
+)
 
 const handleRefresh = async () => {
-  try {
-    // 清除缓存并刷新数据
-    await cachedApi.cache.clearModuleCache('materials')
-    const result = await refresh()
-
-    console.log('🔄 库存预警数据已刷新:', result?.length || 0, '条记录')
-    emit('refresh')
-  } catch (error) {
-    console.error('❌ 库存预警刷新失败:', error.message)
-    emit('error', error.message)
-  }
+  await Promise.all([
+    pollingService.executeTask('cutter-inventory-warnings'),
+    pollingService.executeTask('cutter-item-warnings')
+  ])
 }
 
-const handleSettings = () => {
-  emit('settings')
-}
-
-const applyFilter = () => {
-  // 过滤逻辑已在计算属性中实现
-}
-
-// 订阅全局轮询数据：warn-materials
-const dataStore = useDataStore()
-watch(
-  () => dataStore.getData('warn-materials'),
-  (payload) => {
-    const rows = payload?.rows || []
-    alarmMaterials.value = rows
-  },
-  { immediate: true }
-)
+const warningKey = (item: CutterInventoryWarning, index: number) =>
+  `${item.source}-${item.id ?? 'no-id'}-${item.materialCode}-${item.cuttingNo}-${item.itemNoAlias}-${item.productName}-${index}`
 </script>
 
 <style scoped>
-/* Mini 视图样式 */
-.mini-view {
-  @apply h-full flex flex-col items-center justify-center text-center;
-  padding: 0.75rem;
-  min-height: 0;
-}
-
-.mini-label {
-  @apply text-xs leading-tight mt-2;
-  color: var(--color-text-secondary);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-}
-
-.mini-value {
-  @apply font-semibold leading-tight;
-  color: var(--color-text);
-  font-size: clamp(1.75rem, 8vw, 2.5rem);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-  letter-spacing: -0.02em;
-  white-space: nowrap;
-}
-
-.mini-value.has-alarm {
-  @apply text-orange-500;
-}
-
-/* Compact 视图样式 */
-.compact-view {
-  @apply h-full flex flex-col;
-  padding: 1rem;
-}
-
-.compact-header {
-  @apply mb-4;
-}
-
-.compact-title {
-  @apply text-lg font-medium;
-  color: var(--color-text);
-}
-
-.material-list {
-  @apply flex-1 space-y-3 overflow-y-auto custom-scrollbar;
-}
-
-.material-item {
-  @apply space-y-2;
-}
-
-.material-info {
-  @apply flex justify-between items-center;
-}
-
-.material-name {
-  @apply font-medium text-sm;
-  color: var(--color-text);
-}
-
-.material-ratio {
-  @apply text-xs;
-  color: var(--color-text-secondary);
-}
-
-.ratio-warn {
-  color: var(--inv-muted);
-}
-
-.zero-tag {
-  margin-left: 6px;
-  padding: 0 6px;
-  border-radius: 10px;
-  font-size: 10px;
-  line-height: 16px;
-  color: var(--inv-zero);
-  background-color: var(--inv-zero-light);
-}
-
-.progress-bar {
-  @apply w-full h-2 rounded-full overflow-hidden;
-  background-color: var(--inv-track);
-}
-
-.progress-fill {
-  @apply h-full transition-all duration-300 rounded-full;
-}
-
-/* Full 视图样式 */
-.full-view {
-  @apply h-full flex flex-col;
-  padding: 1rem;
-}
-
-.full-header {
-  @apply flex justify-between items-center mb-4;
-}
-
-.full-title {
-  @apply text-xl font-medium;
-  color: var(--color-text);
-}
-
-.full-title .count-highlight {
-  font-weight: 700;
-  color: var(--inv-severe);
-  font-size: 1.4em; /* 相对标题放大 */
-  letter-spacing: -0.02em;
-}
-
-.header-actions {
-  @apply flex items-center space-x-2;
-}
-
-.filter-select {
-  @apply px-3 py-1 border rounded-lg text-sm;
-  background-color: var(--color-surface);
-  border-color: var(--color-text-secondary);
-  color: var(--color-text);
-  opacity: 0.8;
-}
-
-.filter-select:hover {
-  opacity: 1;
-  border-color: var(--color-primary);
-}
-
-.filter-select:focus {
-  outline: none;
-  border-color: var(--color-primary);
-  opacity: 1;
-}
-
-.table-container {
-  @apply flex-1 overflow-auto custom-scrollbar;
-}
-
-/* 重写的表格样式 - 避免CSS冲突 */
-.alarm-data-table {
-  width: 100%;
-  font-size: 0.875rem;
-  border-collapse: collapse;
-  table-layout: fixed; /* 固定表格布局 */
-}
-
-/* 列宽比例分配 */
-.alarm-data-table th:nth-child(1) { width: 30%; } /* 物料名称 */
-.alarm-data-table th:nth-child(2) { width: 17.5%; } /* 当前库存 */
-.alarm-data-table th:nth-child(3) { width: 17.5%; } /* 预警库存 */
-.alarm-data-table th:nth-child(4) { width: 17.5%; } /* 差值 */
-.alarm-data-table th:nth-child(5) { width: 17.5%; } /* 类别 */
-
-/* 表头样式 */
-.table-header-row th {
-  padding: 0.5rem 0.75rem;
-  text-align: left;
-  font-weight: 500;
-  border-bottom: 1px solid var(--color-border);
-  color: var(--color-text-secondary);
-}
-
-/* 数据行样式 */
-.data-row {
-  transition: background-color 0.2s ease;
-}
-
-.data-row:hover {
-  background-color: rgba(0, 0, 0, 0.05);
-}
-
-/* 深色模式下的悬停样式 - 使背景变得更亮 */
-.theme-dark .data-row:hover {
-  background-color: #334155; /* 比 #1e293b 更亮的深色 */
-}
-
-.theme-tech .data-row:hover {
-  background-color: #2a3441; /* 比 #1a1f2e 更亮的深色 */
-}
-
-.data-row td {
-  padding: 0.75rem;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-  text-align: left;
-  vertical-align: top;
-}
-
-/* 物料名称列 */
-.cell-material {
-  text-align: left !important;
-}
-
-.material-content {
+.alarm-card {
+  height: 100%;
   display: flex;
   flex-direction: column;
-  text-align: left;
+  gap: 10px;
+  color: var(--color-text);
 }
 
-.material-name {
-  font-weight: 500;
-  color: var(--color-text);
-  text-align: left;
+.mini {
+  height: 100%;
+  display: grid;
+  align-content: center;
+  gap: 6px;
+}
+
+.mini span,
+.mini small,
+.alarm-summary span,
+.warning-main span,
+.warning-main small,
+.warning-value span {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.mini strong {
+  font-size: 44px;
+  line-height: 1;
+  color: var(--color-warning);
+}
+
+.alarm-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.mode-compact .alarm-summary {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.alarm-summary article {
+  padding: 9px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(148, 163, 184, 0.06);
+}
+
+.alarm-summary strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.alarm-summary .danger strong {
+  color: var(--color-danger);
+}
+
+.alarm-summary .warn strong {
+  color: var(--color-warning);
+}
+
+.tabs {
+  display: flex;
+  gap: 6px;
+}
+
+.tabs button {
+  padding: 5px 10px;
+  border-radius: 999px;
+  color: var(--color-text-secondary);
+  background: rgba(148, 163, 184, 0.08);
+}
+
+.tabs button.active {
+  color: #fff;
+  background: var(--color-primary);
+}
+
+.warning-list {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+
+.warning-row {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(148, 163, 184, 0.07);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.risk-dot {
+  width: 8px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--color-warning);
+}
+
+.warning-row.empty .risk-dot {
+  background: var(--color-danger);
+}
+
+.warning-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.warning-main strong,
+.warning-main span,
+.warning-main small {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.material-spec {
-  font-size: 0.75rem;
-  margin-top: 0.25rem;
-  color: var(--color-text-secondary);
-  text-align: left;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.warning-main strong {
+  font-size: 13px;
 }
 
-/* 数据列 */
-.cell-inventory,
-.cell-warn {
-  font-family: 'Courier New', monospace;
+.warning-value {
+  text-align: right;
+}
+
+.warning-value b {
   color: var(--color-text);
-  text-align: left;
+  font-size: 18px;
 }
 
-.cell-diff {
-  font-family: 'Courier New', monospace;
-  font-weight: 500;
-  color: var(--color-text);
-  text-align: left;
+.warning-row.empty .warning-value b {
+  color: var(--color-danger);
 }
 
-.cell-diff.negative {
-  color: #ef4444;
-}
-
-.cell-type {
+.empty-state {
+  height: 100%;
+  display: grid;
+  place-items: center;
   color: var(--color-text-secondary);
-  text-align: left;
-}
-
-/* 空状态样式已移至 EmptyState 组件 */
-
-/* 响应式设计 */
-@media (max-width: 640px) {
-  .alarm-table {
-    @apply text-xs;
-  }
-  
-  .alarm-table th,
-  .alarm-table td {
-    @apply px-2 py-2;
-  }
+  font-size: 13px;
 }
 </style>
