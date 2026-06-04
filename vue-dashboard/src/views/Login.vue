@@ -113,7 +113,7 @@ const errorMessage = ref('')
 const loginForm = ref({
   mobile: '',
   password: '',
-  tokenCode: 'DGjSZDFOOK12aWEsc' // 默认授权码
+  tokenCode: 'fhgdfhdsgsgfs3333' // 默认授权码
 })
 
 // API基础地址
