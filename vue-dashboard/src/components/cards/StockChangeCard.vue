@@ -7,7 +7,8 @@
     :height="height"
     :min-width="minWidth"
     :min-height="minHeight"
-    :loading="loading"
+    :loading="initialLoading"
+    :refreshing="refreshing"
     :has-error="!!error"
     :error-message="error"
     :show-settings="showSettings"
@@ -161,6 +162,9 @@ const error = ref('')
 const displayMode = computed<CardMode>(() => props.forcedMode || detectCardMode(props.width, props.height))
 const storeRecords = computed<CutterStockChangeRecord[]>(() => dataStore.getData('cutter-stock-changes') || [])
 const records = computed(() => (storeRecords.value.length ? storeRecords.value : localRecords.value).slice().sort(sortByCreateTimeDesc))
+const hasData = computed(() => records.value.length > 0)
+const initialLoading = computed(() => loading.value && !hasData.value)
+const refreshing = computed(() => loading.value && hasData.value)
 const recentChanges = computed(() => records.value.slice(0, 40))
 const todayRecords = computed(() => records.value.filter(record => isSameDay(record.createTime, new Date())))
 const todayChangeCount = computed(() => todayRecords.value.length)

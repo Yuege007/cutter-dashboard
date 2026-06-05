@@ -7,7 +7,8 @@
     :height="height"
     :min-width="minWidth"
     :min-height="minHeight"
-    :loading="loading"
+    :loading="initialLoading"
+    :refreshing="refreshing"
     :has-error="!!error"
     :error-message="error"
     :show-settings="showSettings"
@@ -163,6 +164,9 @@ const error = ref('')
 const displayMode = computed<CardMode>(() => props.forcedMode || detectCardMode(props.width, props.height))
 const storeRecords = computed<CutterBorrowRecord[]>(() => dataStore.getData('cutter-violation-records') || [])
 const records = computed(() => (storeRecords.value.length ? storeRecords.value : localRecords.value).slice().sort(sortByRiskTimeDesc))
+const hasData = computed(() => records.value.length > 0)
+const initialLoading = computed(() => loading.value && !hasData.value)
+const refreshing = computed(() => loading.value && hasData.value)
 const recentViolations = computed(() => records.value.slice(0, 40))
 const violationCount = computed(() => records.value.length)
 const uniqueUserCount = computed(() => new Set(records.value.map(record => record.userId || record.workNo || record.userName)).size)

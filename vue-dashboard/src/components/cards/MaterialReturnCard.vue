@@ -7,7 +7,8 @@
     :height="height"
     :min-width="minWidth"
     :min-height="minHeight"
-    :loading="loading"
+    :loading="initialLoading"
+    :refreshing="refreshing"
     :has-error="!!error"
     :error-message="error"
     :show-settings="showSettings"
@@ -159,6 +160,9 @@ const error = ref('')
 const displayMode = computed<CardMode>(() => props.forcedMode || detectCardMode(props.width, props.height))
 const storeRecords = computed<CutterBorrowRecord[]>(() => dataStore.getData('cutter-return-records') || [])
 const records = computed(() => (storeRecords.value.length ? storeRecords.value : localRecords.value).filter(record => record.returnTime).sort(sortByReturnTimeDesc))
+const hasData = computed(() => records.value.length > 0)
+const initialLoading = computed(() => loading.value && !hasData.value)
+const refreshing = computed(() => loading.value && hasData.value)
 const recentReturns = computed(() => records.value.slice(0, 30))
 const todayReturnCount = computed(() => sumCount(records.value.filter(record => isSameDay(record.returnTime, new Date()))))
 const weekReturnCount = computed(() => sumCount(records.value))

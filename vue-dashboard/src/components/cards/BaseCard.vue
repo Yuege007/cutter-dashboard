@@ -29,10 +29,10 @@
           v-if="shouldShowRefresh"
           @click.stop="handleRefresh"
           class="toolbar-btn"
-          :disabled="loading"
+          :disabled="loading || refreshing"
           title="刷新数据"
         >
-          <svg class="toolbar-icon" :class="{ 'animate-spin': loading }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="toolbar-icon" :class="{ 'animate-spin': loading || refreshing }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
         </button>
@@ -136,6 +136,9 @@
 
       <!-- 正常内容 -->
       <div v-else class="card-body">
+        <div v-if="refreshing" class="card-refresh-indicator">
+          更新中
+        </div>
         <slot :mode="currentMode" :data="$attrs.data" />
       </div>
     </div>
@@ -156,6 +159,7 @@ export interface BaseCardProps {
   variant?: 'default' | 'primary' | 'success' | 'warning' | 'danger'
   mode?: CardMode
   loading?: boolean
+  refreshing?: boolean
   loadingText?: string
   hasError?: boolean
   errorMessage?: string
@@ -184,6 +188,7 @@ const props = withDefaults(defineProps<BaseCardProps>(), {
   variant: 'default',
   mode: 'compact',
   loading: false,
+  refreshing: false,
   loadingText: '加载中...',
   hasError: false,
   errorMessage: '加载失败',
@@ -457,6 +462,35 @@ const handleRetry = () => {
 
 .card-body {
   @apply w-full h-full;
+  position: relative;
+}
+
+.card-refresh-indicator {
+  position: absolute;
+  top: -2px;
+  right: 0;
+  z-index: 8;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  line-height: 1;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+  pointer-events: none;
+}
+
+.card-refresh-indicator::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--color-warning);
+  animation: refreshPulse 1s ease-in-out infinite;
 }
 
 /* 状态覆盖层 */
@@ -518,6 +552,18 @@ const handleRetry = () => {
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
+}
+
+@keyframes refreshPulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
 }
 /* 深色主题支持 - 使用主题系统 */
 .theme-dark .apple-card,

@@ -7,7 +7,8 @@
     :height="height"
     :min-width="minWidth"
     :min-height="minHeight"
-    :loading="loading"
+    :loading="initialLoading"
+    :refreshing="refreshing"
     :has-error="!!error"
     :error-message="error"
     :show-settings="showSettings"
@@ -56,26 +57,45 @@
             <span v-if="totalSlotCount === 0" class="bar-empty-state"></span>
           </div>
 
-          <section v-if="displayMode === 'compact'" class="compact-panel">
-            <div class="risk-list">
+          <section v-if="displayMode === 'compact'" ref="compactPanelRef" class="compact-panel">
+            <div class="compact-carousel">
               <article
-                v-for="cabinet in cabinetRiskTop.slice(0, 3)"
-                :key="cabinet.cuttingNo"
-                class="risk-row"
-                :class="cabinet.level"
+                v-if="activeCompactPage?.type === 'cabinet' && topRiskCabinet"
+                :key="`compact-cabinet-${compactPageIndex}`"
+                class="compact-slide compact-cabinet"
+                :class="topRiskCabinet.level"
+                @click="openCabinet(topRiskCabinet.cuttingNo)"
               >
-                <i></i>
-                <div>
-                  <strong>{{ cabinet.name }}</strong>
-                  <span>{{ cabinet.total }} 货道 · {{ cabinet.warning }} 预警 · {{ cabinet.empty }} 空</span>
-                </div>
-                <b>{{ cabinet.riskScore }}</b>
+                <span>风险最高柜体</span>
+                <strong>{{ topRiskCabinet.name }}</strong>
+                <p>{{ topRiskCabinet.total }} 货道 · {{ topRiskCabinet.warning }} 预警 · {{ topRiskCabinet.empty }} 空货道</p>
+              </article>
+
+              <article
+                v-else-if="activeCompactPage?.type === 'priority'"
+                :key="`compact-priority-${compactPageIndex}`"
+                class="compact-slide compact-priority"
+                :class="{ stable: prioritySlots.length === 0 }"
+              >
+                <span>{{ prioritySlots.length > 0 ? '优先处理货道' : '当前状态' }}</span>
+                <strong>{{ priorityText }}</strong>
+                <p>{{ prioritySlots.length > 0 ? `共 ${prioritySlots.length} 个货道需关注` : '当前货道状态稳定' }}</p>
+              </article>
+
+              <article v-else :key="`compact-summary-${compactPageIndex}`" class="compact-slide compact-summary">
+                <span>整体风险摘要</span>
+                <strong>{{ warningSlotCount }} 预警 · {{ emptySlotCount }} 空货道</strong>
+                <p>{{ cabinets.length }} 台刀柜 · {{ totalSlotCount }} 个货道</p>
               </article>
             </div>
 
-            <div class="priority-line" :class="{ stable: prioritySlots.length === 0 }">
-              <span>{{ prioritySlots.length > 0 ? '优先处理' : '当前状态' }}</span>
-              <strong>{{ priorityText }}</strong>
+            <div v-if="compactPages.length > 1" class="carousel-dots">
+              <button
+                v-for="(_, index) in compactPages"
+                :key="index"
+                :class="{ active: index === compactPageIndex }"
+                @click="setCompactPage(index)"
+              ></button>
             </div>
           </section>
 
@@ -101,9 +121,13 @@
                   <span>按断供、低库存和缺口排序</span>
                 </div>
 
-                <div class="priority-grid">
+                <div
+                  ref="priorityGridRef"
+                  class="priority-grid"
+                  :style="{ gridTemplateColumns: `repeat(${priorityGridColumns}, minmax(0, 1fr))` }"
+                >
                   <article
-                    v-for="slot in prioritySlots.slice(0, 8)"
+                    v-for="slot in pagedPrioritySlots"
                     :key="getSlotKey(slot)"
                     class="priority-card"
                     :class="getSlotLevel(slot)"
@@ -124,6 +148,11 @@
                 <div v-if="prioritySlots.length === 0" class="empty-state">
                   当前没有需要优先处理的货道
                 </div>
+
+                <div v-else-if="priorityPageCount > 1" class="board-pager">
+                  <span>第 {{ riskPriorityPage + 1 }} / {{ priorityPageCount }} 页</span>
+                  <i :key="`priority-progress-${riskPriorityPage}`"></i>
+                </div>
               </section>
 
               <section class="cabinet-risk-board">
@@ -132,9 +161,12 @@
                   <span>点击柜体查看单柜货道</span>
                 </div>
 
-                <div class="cabinet-risk-list custom-scrollbar">
+                <div
+                  ref="cabinetRiskListRef"
+                  class="cabinet-risk-list"
+                >
                   <button
-                    v-for="cabinet in cabinetRiskTop"
+                    v-for="cabinet in pagedRiskCabinets"
                     :key="cabinet.cuttingNo"
                     class="cabinet-risk-row"
                     :class="cabinet.level"
@@ -152,6 +184,11 @@
                     </div>
                     <b>{{ cabinet.riskScore }}</b>
                   </button>
+                </div>
+
+                <div v-if="riskCabinetPageCount > 1" class="board-pager">
+                  <span>第 {{ riskCabinetPage + 1 }} / {{ riskCabinetPageCount }} 页</span>
+                  <i :key="`cabinet-risk-progress-${riskCabinetPage}`"></i>
                 </div>
               </section>
             </div>
@@ -176,15 +213,19 @@
                 <div class="cabinet-toolbar">
                   <div>
                     <strong>{{ selectedCabinetSummary?.name || selectedCabinetNo || '未选择刀柜' }}</strong>
-                    <span>{{ selectedSlots.length }} 货道 · 第 {{ currentSlotPage + 1 }} / {{ slotPageCount }} 页</span>
+                    <span>{{ selectedSlots.length }} 货道 · 第 {{ currentSlotPage + 1 }} / {{ slotPageCount }} 页 · 每页 {{ dynamicSlotPageSize }} 个</span>
                   </div>
                   <div class="pager">
-                    <button :disabled="currentSlotPage <= 0" @click="currentSlotPage -= 1">上一页</button>
-                    <button :disabled="currentSlotPage >= slotPageCount - 1" @click="currentSlotPage += 1">下一页</button>
+                    <button :disabled="currentSlotPage <= 0" @click="goToPreviousSlotPage">上一页</button>
+                    <button :disabled="selectedSlots.length === 0" @click="goToNextSlotPage">下一页</button>
                   </div>
                 </div>
 
-                <div class="slot-grid custom-scrollbar">
+                <div
+                  ref="slotGridRef"
+                  class="slot-grid"
+                  :style="{ gridTemplateColumns: `repeat(${slotGridColumns}, minmax(0, 1fr))` }"
+                >
                   <article
                     v-for="slot in pagedSelectedSlots"
                     :key="getSlotKey(slot)"
@@ -211,7 +252,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import BaseCard from './BaseCard.vue'
 import { useDataStore } from '@/stores/data'
 import { pollingService } from '@/services/polling'
@@ -253,6 +294,7 @@ defineEmits<{
 
 type FullView = 'risk' | 'cabinet'
 type RiskLevel = 'normal' | 'warning' | 'empty'
+type CompactPageType = 'cabinet' | 'priority' | 'summary'
 
 interface CabinetSummary {
   cuttingNo: string
@@ -272,7 +314,28 @@ const dataStore = useDataStore()
 const selectedCabinetNo = ref('')
 const fullView = ref<FullView>('risk')
 const currentSlotPage = ref(0)
-const slotPageSize = 42
+const compactPage = ref(0)
+const riskPriorityPage = ref(0)
+const riskCabinetPage = ref(0)
+const compactPanelRef = ref<HTMLElement | null>(null)
+const priorityGridRef = ref<HTMLElement | null>(null)
+const cabinetRiskListRef = ref<HTMLElement | null>(null)
+const slotGridRef = ref<HTMLElement | null>(null)
+const compactPanelSize = ref({ width: 0, height: 0 })
+const priorityGridSize = ref({ width: 0, height: 0 })
+const cabinetRiskListSize = ref({ width: 0, height: 0 })
+const slotGridSize = ref({ width: 0, height: 0 })
+
+const compactIntervalMs = 6000
+const riskIntervalMs = 7000
+const cabinetIntervalMs = 6500
+let compactTimer: ReturnType<typeof setInterval> | null = null
+let riskTimer: ReturnType<typeof setInterval> | null = null
+let cabinetTimer: ReturnType<typeof setInterval> | null = null
+let compactObserver: ResizeObserver | null = null
+let priorityObserver: ResizeObserver | null = null
+let cabinetRiskObserver: ResizeObserver | null = null
+let slotGridObserver: ResizeObserver | null = null
 
 const displayMode = computed(() => props.forcedMode || detectCardMode(props.width, props.height))
 
@@ -333,6 +396,23 @@ const cabinetRiskTop = computed(() =>
   [...cabinetSummaries.value].sort((a, b) => b.riskScore - a.riskScore || b.total - a.total)
 )
 
+const topRiskCabinet = computed(() => cabinetRiskTop.value[0])
+
+const compactPages = computed<{ type: CompactPageType }[]>(() => {
+  const pages: { type: CompactPageType }[] = []
+  if (topRiskCabinet.value) pages.push({ type: 'cabinet' })
+  pages.push({ type: 'priority' })
+  pages.push({ type: 'summary' })
+  return pages
+})
+
+const compactPageIndex = computed(() => {
+  const total = compactPages.value.length
+  return total > 0 ? compactPage.value % total : 0
+})
+
+const activeCompactPage = computed(() => compactPages.value[compactPageIndex.value])
+
 watch(cabinets, (items) => {
   if (!selectedCabinetNo.value && items.length > 0) {
     selectedCabinetNo.value = items[0].cuttingNo
@@ -365,10 +445,60 @@ const selectedCabinetSummary = computed(() =>
 )
 
 const selectedSlots = computed(() => slotsByCabinet.value.get(selectedCabinetNo.value) || [])
-const slotPageCount = computed(() => Math.max(1, Math.ceil(selectedSlots.value.length / slotPageSize)))
+
+const priorityGridColumns = computed(() => {
+  const width = priorityGridSize.value.width
+  if (width > 520) return 2
+  return 1
+})
+
+const priorityPageSize = computed(() => {
+  const rowHeight = 86
+  const gap = 8
+  const rows = Math.max(1, Math.floor((priorityGridSize.value.height + gap) / (rowHeight + gap)))
+  return Math.max(1, rows * priorityGridColumns.value)
+})
+
+const priorityPageCount = computed(() => Math.max(1, Math.ceil(prioritySlots.value.length / priorityPageSize.value)))
+const pagedPrioritySlots = computed(() => {
+  const start = riskPriorityPage.value * priorityPageSize.value
+  return prioritySlots.value.slice(start, start + priorityPageSize.value)
+})
+
+const riskCabinetPageSize = computed(() => {
+  const rowHeight = 66
+  const gap = 4
+  const rows = Math.max(1, Math.floor((cabinetRiskListSize.value.height + gap) / (rowHeight + gap)))
+  return rows
+})
+
+const riskCabinetPageCount = computed(() => Math.max(1, Math.ceil(cabinetRiskTop.value.length / riskCabinetPageSize.value)))
+const pagedRiskCabinets = computed(() => {
+  const start = riskCabinetPage.value * riskCabinetPageSize.value
+  return cabinetRiskTop.value.slice(start, start + riskCabinetPageSize.value)
+})
+
+const slotGridColumns = computed(() => {
+  const width = slotGridSize.value.width
+  const minWidth = 104
+  const gap = 8
+  if (width <= 0) return 4
+  return Math.max(1, Math.floor((width + gap) / (minWidth + gap)))
+})
+
+const slotGridRows = computed(() => {
+  const height = slotGridSize.value.height
+  const minHeight = 86
+  const gap = 8
+  if (height <= 0) return 3
+  return Math.max(1, Math.floor((height + gap) / (minHeight + gap)))
+})
+
+const dynamicSlotPageSize = computed(() => Math.max(1, slotGridColumns.value * slotGridRows.value))
+const slotPageCount = computed(() => Math.max(1, Math.ceil(selectedSlots.value.length / dynamicSlotPageSize.value)))
 const pagedSelectedSlots = computed(() => {
-  const start = currentSlotPage.value * slotPageSize
-  return selectedSlots.value.slice(start, start + slotPageSize)
+  const start = currentSlotPage.value * dynamicSlotPageSize.value
+  return selectedSlots.value.slice(start, start + dynamicSlotPageSize.value)
 })
 
 const priorityText = computed(() => {
@@ -379,10 +509,13 @@ const priorityText = computed(() => {
     .join('、')
 })
 
-const loading = computed(() =>
+const hasData = computed(() => cabinets.value.length > 0 || slots.value.length > 0)
+const storeLoading = computed(() =>
   dataStore.isLoading('cutter-cabinets') ||
   dataStore.isLoading('cutter-cargo-inventory')
 )
+const initialLoading = computed(() => storeLoading.value && !hasData.value)
+const refreshing = computed(() => storeLoading.value && hasData.value)
 const error = computed(() =>
   dataStore.getError('cutter-cabinets') ||
   dataStore.getError('cutter-cargo-inventory') ||
@@ -423,11 +556,147 @@ function getSlotKey(slot: CutterCargoSlot) {
 
 function selectCabinet(cuttingNo: string) {
   selectedCabinetNo.value = cuttingNo
+  currentSlotPage.value = 0
+  restartCabinetCarousel()
 }
 
 function openCabinet(cuttingNo: string) {
   if (cuttingNo) selectedCabinetNo.value = cuttingNo
   fullView.value = 'cabinet'
+  currentSlotPage.value = 0
+  restartCabinetCarousel()
+}
+
+function setCompactPage(index: number) {
+  compactPage.value = index
+  restartCompactCarousel()
+}
+
+function goToPreviousSlotPage() {
+  if (currentSlotPage.value <= 0) return
+  currentSlotPage.value -= 1
+  restartCabinetCarousel()
+}
+
+function goToNextSlotPage() {
+  advanceCabinetCarousel()
+  restartCabinetCarousel()
+}
+
+function measureElement(el: HTMLElement | null) {
+  if (!el) return { width: 0, height: 0 }
+  const rect = el.getBoundingClientRect()
+  return { width: rect.width, height: rect.height }
+}
+
+function observeSize(
+  elementRef: typeof compactPanelRef,
+  sizeRef: typeof compactPanelSize
+) {
+  const observer = new ResizeObserver(entries => {
+    const rect = entries[0]?.contentRect
+    if (!rect) return
+    sizeRef.value = { width: rect.width, height: rect.height }
+  })
+
+  const attach = () => {
+    if (!elementRef.value) return
+    observer.observe(elementRef.value)
+    sizeRef.value = measureElement(elementRef.value)
+  }
+
+  nextTick(attach)
+  return observer
+}
+
+function syncSizeObserver(
+  observer: ResizeObserver | null,
+  elementRef: typeof compactPanelRef,
+  sizeRef: typeof compactPanelSize
+) {
+  if (!observer) return
+  observer.disconnect()
+  if (!elementRef.value) {
+    sizeRef.value = { width: 0, height: 0 }
+    return
+  }
+  observer.observe(elementRef.value)
+  sizeRef.value = measureElement(elementRef.value)
+}
+
+function syncSizeObservers() {
+  nextTick(() => {
+    syncSizeObserver(compactObserver, compactPanelRef, compactPanelSize)
+    syncSizeObserver(priorityObserver, priorityGridRef, priorityGridSize)
+    syncSizeObserver(cabinetRiskObserver, cabinetRiskListRef, cabinetRiskListSize)
+    syncSizeObserver(slotGridObserver, slotGridRef, slotGridSize)
+  })
+}
+
+function clearTimer(timer: ReturnType<typeof setInterval> | null) {
+  if (timer) clearInterval(timer)
+}
+
+function restartCompactCarousel() {
+  clearTimer(compactTimer)
+  compactTimer = null
+  if (displayMode.value !== 'compact' || compactPages.value.length <= 1 || props.isDragging) return
+  compactTimer = setInterval(() => {
+    compactPage.value = (compactPage.value + 1) % compactPages.value.length
+  }, compactIntervalMs)
+}
+
+function restartRiskCarousel() {
+  clearTimer(riskTimer)
+  riskTimer = null
+  if (displayMode.value !== 'full' || fullView.value !== 'risk' || props.isDragging) return
+  if (priorityPageCount.value <= 1 && riskCabinetPageCount.value <= 1) return
+
+  riskTimer = setInterval(() => {
+    if (priorityPageCount.value > 1) {
+      riskPriorityPage.value = (riskPriorityPage.value + 1) % priorityPageCount.value
+    }
+    if (riskCabinetPageCount.value > 1) {
+      riskCabinetPage.value = (riskCabinetPage.value + 1) % riskCabinetPageCount.value
+    }
+  }, riskIntervalMs)
+}
+
+function getNextCabinetNo() {
+  const cabinetsList = cabinetSummaries.value
+  if (cabinetsList.length === 0) return ''
+  const currentIndex = Math.max(0, cabinetsList.findIndex(item => item.cuttingNo === selectedCabinetNo.value))
+  const nextIndex = (currentIndex + 1) % cabinetsList.length
+  return cabinetsList[nextIndex]?.cuttingNo || ''
+}
+
+function advanceCabinetCarousel() {
+  if (selectedSlots.value.length === 0) {
+    const nextCabinetNo = getNextCabinetNo()
+    if (nextCabinetNo) selectedCabinetNo.value = nextCabinetNo
+    currentSlotPage.value = 0
+    return
+  }
+
+  if (currentSlotPage.value < slotPageCount.value - 1) {
+    currentSlotPage.value += 1
+    return
+  }
+
+  const nextCabinetNo = getNextCabinetNo()
+  if (nextCabinetNo) selectedCabinetNo.value = nextCabinetNo
+  currentSlotPage.value = 0
+}
+
+function restartCabinetCarousel() {
+  clearTimer(cabinetTimer)
+  cabinetTimer = null
+  if (displayMode.value !== 'full' || fullView.value !== 'cabinet' || props.isDragging) return
+  if (cabinetSummaries.value.length <= 1 && slotPageCount.value <= 1) return
+
+  cabinetTimer = setInterval(() => {
+    advanceCabinetCarousel()
+  }, cabinetIntervalMs)
 }
 
 const handleRefresh = async () => {
@@ -436,6 +705,58 @@ const handleRefresh = async () => {
     pollingService.executeTask('cutter-cargo-inventory')
   ])
 }
+
+watch(compactPages, pages => {
+  if (compactPage.value >= pages.length) compactPage.value = 0
+  restartCompactCarousel()
+})
+
+watch([displayMode, () => props.isDragging], () => {
+  syncSizeObservers()
+  restartCompactCarousel()
+  restartRiskCarousel()
+  restartCabinetCarousel()
+})
+
+watch([fullView, priorityPageCount, riskCabinetPageCount], () => {
+  syncSizeObservers()
+  restartRiskCarousel()
+  restartCabinetCarousel()
+})
+
+watch([priorityPageSize, prioritySlots], () => {
+  if (riskPriorityPage.value >= priorityPageCount.value) riskPriorityPage.value = Math.max(0, priorityPageCount.value - 1)
+})
+
+watch([riskCabinetPageSize, cabinetRiskTop], () => {
+  if (riskCabinetPage.value >= riskCabinetPageCount.value) riskCabinetPage.value = Math.max(0, riskCabinetPageCount.value - 1)
+})
+
+watch([dynamicSlotPageSize, selectedSlots], () => {
+  if (currentSlotPage.value >= slotPageCount.value) currentSlotPage.value = Math.max(0, slotPageCount.value - 1)
+  restartCabinetCarousel()
+})
+
+onMounted(() => {
+  compactObserver = observeSize(compactPanelRef, compactPanelSize)
+  priorityObserver = observeSize(priorityGridRef, priorityGridSize)
+  cabinetRiskObserver = observeSize(cabinetRiskListRef, cabinetRiskListSize)
+  slotGridObserver = observeSize(slotGridRef, slotGridSize)
+  syncSizeObservers()
+  restartCompactCarousel()
+  restartRiskCarousel()
+  restartCabinetCarousel()
+})
+
+onBeforeUnmount(() => {
+  clearTimer(compactTimer)
+  clearTimer(riskTimer)
+  clearTimer(cabinetTimer)
+  compactObserver?.disconnect()
+  priorityObserver?.disconnect()
+  cabinetRiskObserver?.disconnect()
+  slotGridObserver?.disconnect()
+})
 </script>
 
 <style scoped>
@@ -559,6 +880,82 @@ const handleRefresh = async () => {
   gap: 8px;
 }
 
+.compact-carousel {
+  min-height: 0;
+  display: grid;
+}
+
+.compact-slide {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(148, 163, 184, 0.07);
+  overflow: hidden;
+  animation: panelFadeIn 260ms ease-out;
+}
+
+.compact-slide span,
+.compact-slide p,
+.compact-slide strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compact-slide span {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.compact-slide strong {
+  font-size: 18px;
+  color: var(--color-text);
+}
+
+.compact-slide p {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.compact-cabinet.warning {
+  border-color: rgba(245, 158, 11, 0.28);
+  background: rgba(245, 158, 11, 0.1);
+}
+
+.compact-cabinet.empty,
+.compact-priority:not(.stable) {
+  border-color: rgba(239, 68, 68, 0.26);
+  background: rgba(239, 68, 68, 0.09);
+}
+
+.compact-priority.stable {
+  border-color: rgba(16, 185, 129, 0.22);
+  background: rgba(16, 185, 129, 0.09);
+}
+
+.carousel-dots {
+  display: flex;
+  justify-content: center;
+  gap: 5px;
+}
+
+.carousel-dots button {
+  width: 18px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.28);
+}
+
+.carousel-dots button.active {
+  background: var(--color-primary);
+}
+
 .risk-list {
   min-height: 0;
   display: grid;
@@ -653,6 +1050,7 @@ const handleRefresh = async () => {
 
 .full-panel {
   min-height: 0;
+  height: 100%;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -683,6 +1081,7 @@ const handleRefresh = async () => {
 
 .risk-view {
   min-height: 0;
+  height: 100%;
   flex: 1;
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(210px, 0.85fr);
@@ -693,6 +1092,7 @@ const handleRefresh = async () => {
 .cabinet-risk-board,
 .single-cabinet {
   min-height: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -711,21 +1111,25 @@ const handleRefresh = async () => {
 
 .priority-grid {
   min-height: 0;
+  flex: 1;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: minmax(78px, 1fr);
   gap: 8px;
   overflow: hidden;
 }
 
 .priority-card {
   min-width: 0;
+  min-height: 0;
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 6px;
   padding: 9px;
   border-radius: 8px;
   border: 1px solid rgba(245, 158, 11, 0.24);
   background: rgba(245, 158, 11, 0.09);
   cursor: pointer;
+  animation: cardFadeIn 240ms ease-out both;
 }
 
 .priority-card.empty {
@@ -772,9 +1176,25 @@ const handleRefresh = async () => {
   color: var(--color-danger);
 }
 
+.board-pager {
+  display: grid;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.board-pager i {
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--color-primary), rgba(59, 130, 246, 0.18));
+  transform-origin: left center;
+  animation: carouselProgress 7s linear both;
+}
+
 .cabinet-risk-list {
   min-height: 0;
-  overflow: auto;
+  flex: 1;
+  overflow: hidden;
   display: grid;
   align-content: start;
   gap: 4px;
@@ -787,6 +1207,7 @@ const handleRefresh = async () => {
   border-radius: 8px;
   padding: 8px;
   background: rgba(148, 163, 184, 0.06);
+  animation: cardFadeIn 240ms ease-out both;
 }
 
 .cabinet-risk-row:hover {
@@ -815,6 +1236,7 @@ const handleRefresh = async () => {
 
 .cabinet-view {
   min-height: 0;
+  height: 100%;
   flex: 1;
   display: grid;
   grid-template-columns: 170px minmax(0, 1fr);
@@ -823,14 +1245,20 @@ const handleRefresh = async () => {
 
 .cabinet-selector {
   min-height: 0;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   display: grid;
   align-content: start;
   gap: 7px;
+  min-width: 0;
 }
 
 .cabinet-selector button {
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
+  min-height: 74px;
+  box-sizing: border-box;
   display: grid;
   grid-template-columns: 10px minmax(0, 1fr);
   gap: 8px;
@@ -840,6 +1268,13 @@ const handleRefresh = async () => {
   text-align: left;
   background: rgba(148, 163, 184, 0.08);
   border: 1px solid rgba(148, 163, 184, 0.14);
+  overflow: visible;
+}
+
+.cabinet-selector button > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
 }
 
 .cabinet-selector button.active {
@@ -892,32 +1327,53 @@ const handleRefresh = async () => {
 
 .slot-grid {
   min-height: 0;
-  overflow: auto;
+  flex: 1;
+  overflow: hidden;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
+  grid-auto-rows: minmax(82px, 1fr);
   gap: 8px;
   align-content: start;
 }
 
 .slot {
-  min-height: 68px;
+  min-height: 82px;
+  min-width: 0;
   display: grid;
-  gap: 3px;
+  grid-template-rows: 18px 28px minmax(18px, 1fr);
+  gap: 2px;
   padding: 8px;
   border-radius: 8px;
   border: 1px solid rgba(148, 163, 184, 0.16);
   background: rgba(16, 185, 129, 0.1);
+  animation: cardFadeIn 220ms ease-out both;
 }
 
-.slot span,
-.slot small {
+.slot span {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 18px;
+}
+
+.slot small {
+  min-width: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-height: 17px;
+  white-space: normal;
+  word-break: break-all;
 }
 
 .slot b {
-  font-size: 19px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 20px;
+  line-height: 28px;
   color: var(--color-success);
 }
 
@@ -957,6 +1413,40 @@ const handleRefresh = async () => {
   color: var(--color-text-secondary);
   text-align: center;
   font-size: 13px;
+}
+
+@keyframes panelFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes cardFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes carouselProgress {
+  from {
+    transform: scaleX(0);
+  }
+
+  to {
+    transform: scaleX(1);
+  }
 }
 
 @media (max-width: 900px) {
